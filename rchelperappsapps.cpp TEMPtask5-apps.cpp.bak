@@ -1,0 +1,57 @@
+[33m0e3b3b9[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Initial upload of folder contents
+[33mc36c61a[m Initial upload of folder contents
+[33m2fe3a7d[m Initial upload of folder contents
+[33mba08afb[m Add star history chart to README
+[33mbe3dd3b[m Update README to use remote image for Audiopad
+[33m6c7f915[m[33m ([m[1;33mtag: [m[1;33mv1.1.1[m[33m)[m bump: version 1.1.1
+[33m3deb316[m Merge pull request #13 from im-eman/fix/12-issue
+[33m6159ad7[m feat(ui): add multi-select, optimize thumbnail memory, and fix deck tile titles (fixes #12) - Downscale image data URLs to 300x300 thumbnails before storage to prevent memory lag - Replace 1s full-JSON polling with tab signature hashing - Add Ctrl+Click multi-selection with batch image assign/remove actions - Make Media Grid View default and add dropdown in Settings with localStorage persistence - Fix Stream Deck mode tile layout so sound names without images are centered and readable
+[33m12611c0[m fix(core): ensure sound image persistence and robust sound matching - Guard Data::set against re-indexing secondary instances into Globals::gSounds - Directly mutate tabs sound data in setSoundImage/setSoundsImage to guarantee persistence on config save - Add case-insensitive, normalized path and name matching fallback in Window::getTabContent
+[33m28dea44[m[33m ([m[1;33mtag: [m[1;33mv1.1.0[m[33m)[m bump: version 1.1.0
+[33m5ef452a[m Merge pull request #10 from audiopadapp/fix/glitches
+[33m0fffba2[m fix(ui): resolve transport dock unresponsiveness and volume slider desync
+[33mab09c99[m fix(ui): synchronize playback start events and guard tray updates
+[33mb0d7159[m fix(audio): improve seek synchronization and progress reporting
+[33m2eb2913[m build(cmake): disable backward-cpp stack details auto-detect on windows
+[33m6f1184f[m refactor: remove youtube downloader feature and clean up dependencies
+[33m0643e48[m docs: add CONTRIBUTING.md, SECURITY.md, CHANGELOG.md, and CODEOWNERS
+[33mbb33895[m Merge pull request #9 from audiopadapp/ui
+[33mef29b61[m feat(ui): update default window resolution and refine header dock badges
+[33m3076ab8[m fix(core): resolve MSVC compilation warnings across audio, hotkeys, and UI
+[33mffc256a[m fix(deps): resolve MSVC C4702 and C4267 warnings in vendored libraries
+[33maffbe8e[m build(cmake): update minimum required version to 3.16...3.30 and modernize policies
+[33m632aa05[m feat(ui): redesign desktop app theme
+[33mf36ff81[m build(cmake): copy frontend assets to target dist directory post-build
+[33m08ec903[m feat(app): display dialog when another instance is already running
+[33mf23a32d[m fix(ui): prevent blank screen crash on startup and handle idle playback
+[33mc513186[m fix(webview): set controller bounds on startup and report init errors
+[33me44efcc[m Merge pull request #8 from audiopadapp/fix/4-issue
+[33m7fbf2a9[m fix(playback): fix individual stop buttons and retain scroll position when playing sounds
+[33m377d875[m fix(audio): resample decoder to device rate to prevent premature MP3 cutoff
+[33m37e826f[m Merge pull request #7 from audiopadapp/fix/3-issue
+[33mc4ae442[m feat(ui): add RMB context menu, sound image backgrounds, and batch assignment
+[33m683cfe9[m feat(core): add sound image property, serialization, and persistence
+[33mf3da135[m fix(audio): prevent cutting off audio tail during playback completion
+[33m5864e8b[m Merge pull request #6 from audiopadapp/fix/2-issue
+[33mdaf9388[m feat(ui): add dedicated vb-cable setup screen and download guide (#2)
+[33m952a565[m fix(audio): resolve mic override permissions and add vb-cable detection (fixes #2)
+[33m418592d[m build(win32): require administrator elevation manifest for audio routing
+[33m38bdc3b[m Merge pull request #5 from audiopadapp/fix/1-issue
+[33ma527267[m fix(ui): resolve vanishing volume sliders and add global master volume control (closes #1)
+[33m0661dd3[m chore: ignore local Serena workspace
+[33m2e52944[m[33m ([m[1;33mtag: [m[1;33mv1.0.1[m[33m)[m bump: version 1.0.1 & fix output routing and mic override issues
+[33mfaf8561[m chore: update funding.yml to use Patreon instead of Ko-fi
+[33m63184fb[m Update video source in README.md
+[33m5bf137e[m docs(readme): replace relative video path with absolute URL
+[33m9547b58[m ci: upgrade action-download-artifact to v8 to resolve security vulnerability
+[33mf3a8599[m docs: add demo video and enhance README layout with badges
+[33m8368457[m[33m ([m[1;33mtag: [m[1;33mv1.0.0[m[33m)[m feat: register C++ dependency submodules
+[33mfa501e5[m chore: ignore local release guide and matches files
+[33mfbd8a98[m feat(assets): add Audiopad brand logos and icon assets
+[33m7021430[m docs: write comprehensive README with building and contributing guides
+[33m8d5a6fd[m ci: add GitHub Actions pipelines for automated Windows and Linux releases
+[33md1f4245[m deploy: configure Windows Inno Setup scripts and Linux app shortcuts
+[33md891905[m build: configure CMake build generation and global policy targets
+[33m5a5ea3a[m feat(ui): integrate WebView container and link Audiopad UI frontend assets
+[33m606c744[m feat(core): implement high-performance C++ backend and audio routing engines
+[33m6332c4a[m feat: initialize project configuration, licenses, and community guidelines

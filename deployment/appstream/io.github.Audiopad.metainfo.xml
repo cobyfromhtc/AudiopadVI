@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 Audiopad -->
+<component type="desktop-application">
+  <id>io.github.Audiopad</id>
+  <launchable type="desktop-id">io.github.Audiopad.desktop</launchable>
+  <name>Audiopad</name>
+  <developer_name>Audiopad</developer_name>
+  <summary>A cross-platform soundboard</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <url type="homepage">https://audiopad.vercel.app/</url>
+  <url type="donation">https://ko-fi.com/audiopad/</url>
+  <url type="bugtracker">https://github.com/audiopadapp/audiopad/issues</url>
+  <url type="help">https://github.com/audiopadapp/audiopad/issues</url>
+  <url type="vcs-browser">https://github.com/audiopadapp/audiopad</url>
+  <description>
+    <p>
+      A universal soundboard that uses PulseAudio modules or PipeWire linking
+    </p>
+    <p>Features</p>
+    <ul>
+      <li>Dark and light theme</li>
+      <li>Folder tabs</li>
+      <li>Supports a variety of audio formats</li>
+      <li>Sound search (can also be opened with CTRL + F)</li>
+      <li>Sound hotkeys</li>
+      <li>Stop button and hotkey</li>
+      <li>App Passthrough (can also be opened with CTRL + G)</li>
+      <li>Media Controls</li>
+    </ul>
+  </description>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Dark Interface</caption>
+      <image>https://raw.githubusercontent.com/audiopadapp/screenshots/screenshots/playing-dark.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Dark Settings</caption>
+      <image>https://raw.githubusercontent.com/audiopadapp/screenshots/screenshots/settings-dark.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Light Interface</caption>
+      <image>https://raw.githubusercontent.com/audiopadapp/screenshots/screenshots/playing-light.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Light Grid View</caption>
+      <image>https://raw.githubusercontent.com/audiopadapp/screenshots/screenshots/grid-view-light.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="1.1.1" date="2026-10-07">
+      <url>https://github.com/audiopadapp/audiopad/releases/tag/v1.1.1</url>
+      <description>
+        <p>Release of Audiopad version 1.1.1</p>
+        <ul>
+          <li>Fix sound image persistence and reload vanishing bug (#12)</li>
+          <li>Optimize image thumbnails to eliminate memory spikes and UI lag</li>
+          <li>Add Ctrl+Click multi-selection with batch image assignment and removal</li>
+          <li>Set Media Grid View as default with configurable view mode setting</li>
+          <li>Fix Stream Deck tile sound name visibility when no image is assigned</li>
+        </ul>
+      </description>
+    </release>
+
+    <release version="1.1.0" date="2026-10-07">
+      <url>https://github.com/audiopadapp/audiopad/releases/tag/v1.1.0</url>
+      <description>
+        <p>Release of Audiopad version 1.1.0</p>
+        <ul>
+          <li>Resolve transport dock responsiveness and volume slider synchronization</li>
+          <li>Synchronize playback start events and guard tray updates</li>
+          <li>Improve seek synchronization and audio progress reporting</li>
+          <li>Fix audio output routing and microphone override stability</li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.0.0" date="2026-06-30">
+      <url>https://github.com/audiopadapp/audiopad/releases/tag/v1.0.0</url>
+      <description>
+        <p>Initial release of Audiopad version 1.0.0</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1" />
+</component>
