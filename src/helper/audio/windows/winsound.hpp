@@ -2,6 +2,7 @@
 #if defined(_WIN32)
 #include <fancy.hpp>
 #include <mmdeviceapi.h>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>

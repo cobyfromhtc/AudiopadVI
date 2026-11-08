@@ -2,6 +2,7 @@
 #include "pulseaudio.hpp"
 #include "forward.hpp"
 #include <core/global/globals.hpp>
+#include <algorithm>
 #include <cstring>
 #include <exception>
 #include <fancy.hpp>

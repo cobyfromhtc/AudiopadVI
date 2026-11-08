@@ -235,7 +235,7 @@ namespace Audiopad::Helper
                         if ((event->mask & (IN_CREATE | IN_MOVED_TO)) && (event->mask & IN_ISDIR) && event->len > 0)
                         {
                             const auto parent = watches.find(event->wd);
-                            if (parent != watches.end() && event->name != nullptr)
+                            if (parent != watches.end())
                             {
                                 addWatchTree(fd, parent->second / std::string(event->name), watches);
                             }

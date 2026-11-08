@@ -45,7 +45,12 @@ const icons = {
   winMinimize: `<svg viewBox="0 0 10 10" width="10" height="10" shape-rendering="crispEdges"><rect x="1" y="4.5" width="8" height="1" fill="currentColor"></rect></svg>`,
   winMaximize: `<svg viewBox="0 0 10 10" width="10" height="10" shape-rendering="crispEdges" fill="none"><rect x="1.5" y="1.5" width="7" height="7" stroke="currentColor" stroke-width="1"></rect></svg>`,
   winRestore: `<svg viewBox="0 0 10 10" width="10" height="10" shape-rendering="crispEdges" fill="none"><rect x="0.5" y="2.5" width="6" height="6" stroke="currentColor" stroke-width="1"></rect><path d="M2.5 2.5 V0.5 H8.5 V6.5 H6.5" stroke="currentColor" stroke-width="1" fill="none"></path></svg>`,
-  winClose: `<svg viewBox="0 0 10 10" width="10" height="10" shape-rendering="crispEdges" stroke="currentColor" stroke-width="1.1"><path d="M1 1 L9 9 M9 1 L1 9"></path></svg>`
+  winClose: `<svg viewBox="0 0 10 10" width="10" height="10" shape-rendering="crispEdges" stroke="currentColor" stroke-width="1.1"><path d="M1 1 L9 9 M9 1 L1 9"></path></svg>`,
+  keyboard: `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>`,
+  rocket: `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path></svg>`,
+  star: `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`,
+  check: `<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+  wrench: `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>`
 };
 
 // --- Application Reactive State ---
@@ -54,7 +59,7 @@ let state = {
   activeTabId: null,
   currentView: 'folder', // 'folder', 'favorites', 'settings', 'system-info', 'help'
   searchQuery: '',
-  listViewMode: 'grid', // 'grid' (Media Grid), 'deck' (Stream Deck Macro Tiles), 'table' (High-density Table)
+  listViewMode: 'table', // 'grid' (Media Grid), 'deck' (Stream Deck Macro Tiles), 'table' (Soundpad High-Density Table — default)
   activeVolumePopoverSoundId: null,
   hoveredVolumeSoundId: null,
   isMasterVolumeOpen: false,
@@ -275,7 +280,7 @@ async function init() {
       }
     }
 
-    // Determine initial view mode: localStorage override > savedSettings > default 'grid'
+    // Determine initial view mode: localStorage override > savedSettings > default 'table'
     const localSavedMode = localStorage.getItem('audiopad_view_mode');
     if (localSavedMode && ['grid', 'deck', 'table'].includes(localSavedMode)) {
       state.listViewMode = localSavedMode;
@@ -284,7 +289,7 @@ async function init() {
       else if (state.settings.viewMode === 2) state.listViewMode = 'deck';
       else state.listViewMode = 'grid';
     } else {
-      state.listViewMode = 'grid';
+      state.listViewMode = 'table';
     }
 
     // Load output and recording devices for selectors on startup
@@ -2089,6 +2094,11 @@ async function handleGlobalBoostInput(val) {
       el.setAttribute('value', numVal);
     }
   });
+  //* Reveal/hide the "Reset to 100%" row in place — the row is always mounted
+  //* (see the Sound Boost card) so no re-render is needed mid-drag.
+  document.querySelectorAll('.boost-reset-row').forEach(el => {
+    el.classList.toggle('visible', numVal > 100);
+  });
 
   if (window.changeSettings) {
     try {
@@ -3881,12 +3891,37 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
     let contentHtml = '';
     
     if (soundsList.length === 0 && (isSearching || childFolderCount === 0)) {
+      //* Empty folder vs. no search hits vs. no favorites yet — each variant
+      //* gets its own artwork, copy and call-to-action so the state never
+      //* reads as a dead end.
+      const canImportHere = isFolderView && activeTab && !isSearching;
       contentHtml = `
-        <div class="table-container">
+        <div class="table-container empty-state-container">
           <div class="empty-state">
-            <div class="empty-icon" style="font-size: 24px;">${isSearching ? '🔎' : '📁'}</div>
-            <div class="empty-text">${isSearching ? 'No sounds match your search' : 'No sounds found here'}</div>
-            <div style="font-size: 12px; color: var(--color-muted); margin-top: 4px;">${isSearching ? 'Try a different keyword — search covers all subfolders' : 'Add audio files to folders or configure favorite items'}</div>
+            <div class="empty-state-icon">${isSearching ? icons.search : icons.logo}</div>
+            <div class="empty-state-title">${isSearching ? 'No sounds match your search' : 'No sounds found here'}</div>
+            <div class="empty-state-desc">
+              ${isSearching
+                ? 'Try a different keyword — search covers every subfolder of this category.'
+                : (isFolderView
+                    ? 'Drag audio files in from your file explorer, or import a folder. MP3, WAV and FLAC are supported.'
+                    : 'Star sounds as favorites and they will collect here for one-tap access.')}
+            </div>
+            <div class="empty-state-actions">
+              ${isSearching ? `
+                <button class="btn-primary" onclick="handleSearch('')">
+                  ${icons.close} Clear Search
+                </button>
+              ` : ''}
+              ${canImportHere ? `
+                <button class="btn-primary" onclick="handleImportFolder()" ${state.isImportingFolder ? 'disabled style="opacity: 0.55; pointer-events: none;"' : ''}>
+                  ${state.isImportingFolder ? icons.spinner : icons.importIcon} ${state.isImportingFolder ? 'Importing…' : 'Import Folder'}
+                </button>
+                <button class="btn-subtle" onclick="handleOpenFolder(${activeTab.id})" title="Open this folder in your file explorer and drop files in">
+                  ${icons.folderOpen} Open in Explorer
+                </button>
+              ` : ''}
+            </div>
           </div>
         </div>
       `;
@@ -4272,243 +4307,354 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
 
 
   if (state.currentView === 'settings') {
+    const themeMode = state.settings.theme;
     return `
-      <div class="settings-grid">
-        <!-- Settings Panel Column 1 -->
-        <div style="display: flex; flex-direction: column; gap: var(--spacing-xl);">
-          <div class="card-section">
-            <div class="card-title">Playback Configurations</div>
-            <div style="display: flex; flex-direction: column; gap: var(--spacing-md);">
-              <label class="checkbox-row">
-                <input type="checkbox" ${state.settings.muteDuringPlayback ? 'checked' : ''} onchange="updateSetting('muteDuringPlayback', this.checked)">
-                <div class="checkbox-label-wrapper">
-                  <span class="checkbox-title">Mute Microphones during playback</span>
-                  <span class="checkbox-desc">Mute your active micro input signal while playing soundboard effects.</span>
-                </div>
-              </label>
-              <label class="checkbox-row">
-                <input type="checkbox" ${state.settings.allowOverlapping ? 'checked' : ''} onchange="updateSetting('allowOverlapping', this.checked)">
-                <div class="checkbox-label-wrapper">
-                  <span class="checkbox-title">Allow Overlapping Sounds</span>
-                  <span class="checkbox-desc">Permit multiple sound streams to play simultaneously without cutoffs.</span>
-                </div>
-              </label>
-              <label class="checkbox-row">
-                <input type="checkbox" ${state.settings.minimizeToTray ? 'checked' : ''} onchange="updateSetting('minimizeToTray', this.checked)">
-                <div class="checkbox-label-wrapper">
-                  <span class="checkbox-title">Minimize to system tray</span>
-                  <span class="checkbox-desc">Minimize the soundboard window to the system taskbar tray on close.</span>
-                </div>
-              </label>
-              <label class="checkbox-row">
-                <input type="checkbox" ${state.settings.tabHotkeysOnly ? 'checked' : ''} onchange="updateSetting('tabHotkeysOnly', this.checked)">
-                <div class="checkbox-label-wrapper">
-                  <span class="checkbox-title">Restrict Hotkeys to Active Tab</span>
-                  <span class="checkbox-desc">Disable hotkeys belonging to files outside the currently selected directory.</span>
-                </div>
-              </label>
-              <label class="checkbox-row">
-                <input type="checkbox" ${state.settings.deleteToTrash ? 'checked' : ''} onchange="updateSetting('deleteToTrash', this.checked)">
-                <div class="checkbox-label-wrapper">
-                  <span class="checkbox-title">Delete files to trash bin</span>
-                  <span class="checkbox-desc">Move deleted soundboard files to system recycle bin rather than erasing.</span>
-                </div>
-              </label>
-            </div>
-          </div>
-          
-          <div class="card-section">
-            <div class="card-title">System Themes</div>
-            <div class="form-group">
-              <label for="theme-select">Visual Design Appearance</label>
-              <select id="theme-select" class="sort-select" style="width: 100%; height: 36px;" onchange="updateSetting('theme', parseInt(this.value, 10))">
-                <option value="0" ${state.settings.theme === 0 ? 'selected' : ''}>Follow System Settings</option>
-                <option value="1" ${state.settings.theme === 1 ? 'selected' : ''}>Dark Slate Theme</option>
-                <option value="2" ${state.settings.theme === 2 ? 'selected' : ''}>Light Soft Theme</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="card-section">
-            <div class="card-title">Default Layout & View Mode</div>
-            <div class="form-group">
-              <label for="default-view-select">Default Soundboard View Mode</label>
-              <select id="default-view-select" class="sort-select" style="width: 100%; height: 36px;" onchange="updateDefaultViewMode(this.value)">
-                <option value="grid" ${state.listViewMode === 'grid' ? 'selected' : ''}>Media Grid View (Default)</option>
-                <option value="deck" ${state.listViewMode === 'deck' ? 'selected' : ''}>Stream Deck Macro Pads</option>
-                <option value="table" ${state.listViewMode === 'table' ? 'selected' : ''}>Soundpad High-Density Table</option>
-              </select>
-            </div>
-          </div>
-          
-          <div class="card-section">
-            <div class="card-title">Global Shortcut Hotkeys</div>
-            <div style="display: flex; flex-direction: column; gap: var(--spacing-md);">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div class="checkbox-label-wrapper">
-                  <span class="checkbox-title">PTT (Push-To-Talk) keys</span>
-                  <span class="checkbox-desc">Exempt these keys from mute blocks.</span>
-                </div>
-                <button class="hotkey-badge" onclick="startRecordHotkey(null, 'ptt')">
-                  ${state.settings.pushToTalkKeys && state.settings.pushToTalkKeys.length > 0 ? 'PTT Active' : 'Assign'}
-                </button>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div class="checkbox-label-wrapper">
-                  <span class="checkbox-title">Stop Hotkey</span>
-                  <span class="checkbox-desc">Emergency shortcut to stop all audios.</span>
-                </div>
-                <button class="hotkey-badge" onclick="startRecordHotkey(null, 'stop')">
-                  ${state.settings.stopHotkey && state.settings.stopHotkey.length > 0 ? 'Stop Active' : 'Assign'}
-                </button>
-              </div>
-            </div>
+      <div class="settings-shell">
+        <!-- Page header -->
+        <div class="settings-header">
+          <div class="settings-header-icon">${icons.settings}</div>
+          <div class="settings-header-text">
+            <div class="settings-header-title">Settings &amp; Audio</div>
+            <div class="settings-header-desc">Playback behaviour, appearance, volumes and audio routing — every change applies instantly and is saved automatically.</div>
           </div>
         </div>
-        
-        <!-- Settings Panel Column 2 -->
-        <div style="display: flex; flex-direction: column; gap: var(--spacing-xl);">
-          <div class="card-section">
-            <div class="card-title">Master Audio Volumes</div>
-            <div style="display: flex; flex-direction: column; gap: var(--spacing-md); margin-bottom: var(--spacing-md);">
-              <div class="vol-slider-row">
-                <div class="vol-label-group">
-                  <label>Master Local Volume (You Hear)</label>
-                  <span id="settings-vol-text-local" class="vol-val-badge">${state.settings.localVolume}%</span>
+
+        <div class="settings-grid">
+          <!-- Settings Panel Column 1 -->
+          <div class="settings-col">
+
+            <!-- Appearance -->
+            <section class="settings-card">
+              <header class="settings-card-head">
+                <span class="settings-card-icon">${icons.palette}</span>
+                <div class="settings-card-heading">
+                  <div class="settings-card-title">Appearance</div>
+                  <div class="settings-card-sub">Theme and default soundboard layout</div>
                 </div>
-                <input type="range" id="settings-vol-input-local" min="0" max="100" value="${state.settings.localVolume}" oninput="handleMasterVolumeInput('local', this.value)">
-              </div>
-              <div class="vol-slider-row">
-                <div class="vol-label-group">
-                  <label>Master Remote Volume (Others Hear)</label>
-                  <span id="settings-vol-text-remote" class="vol-val-badge">${state.settings.remoteVolume}%</span>
+              </header>
+              <div class="settings-card-body">
+                <div class="settings-field">
+                  <div class="settings-field-label">Visual Design Appearance</div>
+                  <div class="segmented-control">
+                    <button type="button" class="segment ${themeMode === 0 ? 'active' : ''}" onclick="updateSetting('theme', 0)">
+                      ${icons.monitor} System
+                    </button>
+                    <button type="button" class="segment ${themeMode === 1 ? 'active' : ''}" onclick="updateSetting('theme', 1)">
+                      ${icons.moon} Dark
+                    </button>
+                    <button type="button" class="segment ${themeMode === 2 ? 'active' : ''}" onclick="updateSetting('theme', 2)">
+                      ${icons.sun} Light
+                    </button>
+                  </div>
                 </div>
-                <input type="range" id="settings-vol-input-remote" min="0" max="100" value="${state.settings.remoteVolume}" oninput="handleMasterVolumeInput('remote', this.value)">
+
+                <div class="settings-field">
+                  <div class="settings-field-label">Default Soundboard View Mode</div>
+                  <div class="viewmode-picker">
+                    <button type="button" class="viewmode-card ${state.listViewMode === 'table' ? 'active' : ''}" onclick="updateDefaultViewMode('table')" title="Soundpad High-Density Table — the default layout">
+                      <span class="viewmode-tag">Default</span>
+                      <span class="viewmode-icon">${icons.table}</span>
+                      <span class="viewmode-name">Soundpad Table</span>
+                      <span class="viewmode-desc">High-density sound rows</span>
+                    </button>
+                    <button type="button" class="viewmode-card ${state.listViewMode === 'deck' ? 'active' : ''}" onclick="updateDefaultViewMode('deck')" title="Stream Deck Macro Pads">
+                      <span class="viewmode-icon">${icons.deck}</span>
+                      <span class="viewmode-name">Stream Deck</span>
+                      <span class="viewmode-desc">Macro pad tiles</span>
+                    </button>
+                    <button type="button" class="viewmode-card ${state.listViewMode === 'grid' ? 'active' : ''}" onclick="updateDefaultViewMode('grid')" title="Media Grid View">
+                      <span class="viewmode-icon">${icons.grid}</span>
+                      <span class="viewmode-name">Media Grid</span>
+                      <span class="viewmode-desc">Visual card grid</span>
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-            <label class="checkbox-row">
-              <input type="checkbox" ${state.settings.syncVolumes ? 'checked' : ''} onchange="updateSetting('syncVolumes', this.checked)">
-              <div class="checkbox-label-wrapper">
-                <span class="checkbox-title">Sync Volume levels</span>
-                <span class="checkbox-desc">Bind local and remote playback output slider volume levels together.</span>
+            </section>
+
+            <!-- Playback & Behaviour -->
+            <section class="settings-card">
+              <header class="settings-card-head">
+                <span class="settings-card-icon">${icons.play}</span>
+                <div class="settings-card-heading">
+                  <div class="settings-card-title">Playback &amp; Behaviour</div>
+                  <div class="settings-card-sub">How sounds start, stack and stop</div>
+                </div>
+              </header>
+              <div class="settings-card-body">
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Mute microphones during playback</span>
+                    <span class="setting-toggle-desc">Mute your active mic input while soundboard effects are playing.</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.settings.muteDuringPlayback ? 'checked' : ''} onchange="updateSetting('muteDuringPlayback', this.checked)">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Allow overlapping sounds</span>
+                    <span class="setting-toggle-desc">Play multiple sound streams at the same time without cutoffs.</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.settings.allowOverlapping ? 'checked' : ''} onchange="updateSetting('allowOverlapping', this.checked)">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Restrict hotkeys to active tab</span>
+                    <span class="setting-toggle-desc">Hotkeys of sounds outside the currently selected category are ignored.</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.settings.tabHotkeysOnly ? 'checked' : ''} onchange="updateSetting('tabHotkeysOnly', this.checked)">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
               </div>
-            </label>
+            </section>
+
+            <!-- Application -->
+            <section class="settings-card">
+              <header class="settings-card-head">
+                <span class="settings-card-icon">${icons.systemInfo}</span>
+                <div class="settings-card-heading">
+                  <div class="settings-card-title">Application</div>
+                  <div class="settings-card-sub">Window and file behaviour</div>
+                </div>
+              </header>
+              <div class="settings-card-body">
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Minimize to system tray</span>
+                    <span class="setting-toggle-desc">Send the soundboard window to the system tray on close.</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.settings.minimizeToTray ? 'checked' : ''} onchange="updateSetting('minimizeToTray', this.checked)">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Delete files to trash bin</span>
+                    <span class="setting-toggle-desc">Move deleted sound files to the recycle bin instead of erasing them.</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.settings.deleteToTrash ? 'checked' : ''} onchange="updateSetting('deleteToTrash', this.checked)">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
+              </div>
+            </section>
+
+            <!-- Global Shortcut Hotkeys -->
+            <section class="settings-card">
+              <header class="settings-card-head">
+                <span class="settings-card-icon">${icons.keyboard}</span>
+                <div class="settings-card-heading">
+                  <div class="settings-card-title">Global Shortcut Hotkeys</div>
+                  <div class="settings-card-sub">System-wide key combinations</div>
+                </div>
+              </header>
+              <div class="settings-card-body">
+                <div class="hotkey-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Push-To-Talk keys</span>
+                    <span class="setting-toggle-desc">Keys exempt from the mute block — hold to speak.</span>
+                  </div>
+                  <button class="hotkey-badge ${state.settings.pushToTalkKeys && state.settings.pushToTalkKeys.length > 0 ? 'assigned' : ''}" onclick="startRecordHotkey(null, 'ptt')">
+                    ${state.settings.pushToTalkKeys && state.settings.pushToTalkKeys.length > 0 ? 'PTT Active' : 'Assign'}
+                  </button>
+                </div>
+                <div class="hotkey-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Emergency stop hotkey</span>
+                    <span class="setting-toggle-desc">Instantly stops every playing sound.</span>
+                  </div>
+                  <button class="hotkey-badge ${state.settings.stopHotkey && state.settings.stopHotkey.length > 0 ? 'assigned' : ''}" onclick="startRecordHotkey(null, 'stop')">
+                    ${state.settings.stopHotkey && state.settings.stopHotkey.length > 0 ? 'Stop Active' : 'Assign'}
+                  </button>
+                </div>
+              </div>
+            </section>
           </div>
 
-          <div class="card-section" style="margin-top: var(--spacing-xl);">
-            <div class="card-title">Sound Boost</div>
-            <div style="display: flex; flex-direction: column; gap: var(--spacing-md);">
-              <div class="vol-slider-row">
-                <div class="vol-label-group">
-                  <label>Global Boost (all soundboards)</label>
-                  <span id="settings-boost-text" class="vol-val-badge ${state.settings.soundBoost > 100 ? 'boosted' : ''}">${state.settings.soundBoost}%</span>
+          <!-- Settings Panel Column 2 -->
+          <div class="settings-col">
+
+            <!-- Master Audio Volumes -->
+            <section class="settings-card">
+              <header class="settings-card-head">
+                <span class="settings-card-icon">${icons.volume}</span>
+                <div class="settings-card-heading">
+                  <div class="settings-card-title">Master Audio Volumes</div>
+                  <div class="settings-card-sub">Global levels for what you and others hear</div>
                 </div>
-                <input type="range" id="settings-boost-input" min="100" max="400" step="5" value="${state.settings.soundBoost}"
-                       onpointerdown="handleSliderDragStart(event)" onmousedown="handleSliderDragStart(event)"
-                       oninput="handleGlobalBoostInput(this.value)">
+              </header>
+              <div class="settings-card-body">
+                <div class="settings-slider">
+                  <div class="settings-slider-head">
+                    <span class="settings-slider-label">${icons.headphones} Master Local Volume <em>you hear</em></span>
+                    <span id="settings-vol-text-local" class="vol-val-badge">${state.settings.localVolume}%</span>
+                  </div>
+                  <input type="range" id="settings-vol-input-local" min="0" max="100" value="${state.settings.localVolume}"
+                         onpointerdown="handleSliderDragStart(event)" onmousedown="handleSliderDragStart(event)"
+                         oninput="handleMasterVolumeInput('local', this.value)">
+                </div>
+                <div class="settings-slider">
+                  <div class="settings-slider-head">
+                    <span class="settings-slider-label">${icons.mic} Master Remote Volume <em>others hear</em></span>
+                    <span id="settings-vol-text-remote" class="vol-val-badge">${state.settings.remoteVolume}%</span>
+                  </div>
+                  <input type="range" id="settings-vol-input-remote" min="0" max="100" value="${state.settings.remoteVolume}"
+                         onpointerdown="handleSliderDragStart(event)" onmousedown="handleSliderDragStart(event)"
+                         oninput="handleMasterVolumeInput('remote', this.value)">
+                </div>
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Sync volume levels</span>
+                    <span class="setting-toggle-desc">Bind the local and remote sliders together.</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.settings.syncVolumes ? 'checked' : ''} onchange="updateSetting('syncVolumes', this.checked)">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
               </div>
-              <div class="checkbox-desc boost-desc">
-                Amplify quiet audio clips above 100% output. Stacks with the per-soundboard boost shown in each category view.
-                Excessive boosting may introduce clipping distortion.
-              </div>
-              ${state.settings.soundBoost > 100 ? `
-                <div>
+            </section>
+
+            <!-- Sound Boost -->
+            <section class="settings-card">
+              <header class="settings-card-head">
+                <span class="settings-card-icon">${icons.bolt}</span>
+                <div class="settings-card-heading">
+                  <div class="settings-card-title">Sound Boost</div>
+                  <div class="settings-card-sub">Global amplification for every soundboard</div>
+                </div>
+              </header>
+              <div class="settings-card-body">
+                <div class="settings-slider">
+                  <div class="settings-slider-head">
+                    <span class="settings-slider-label">${icons.boltSmall} Global Boost</span>
+                    <span id="settings-boost-text" class="vol-val-badge ${state.settings.soundBoost > 100 ? 'boosted' : ''}">${state.settings.soundBoost}%</span>
+                  </div>
+                  <input type="range" id="settings-boost-input" min="100" max="400" step="5" value="${state.settings.soundBoost}"
+                         onpointerdown="handleSliderDragStart(event)" onmousedown="handleSliderDragStart(event)"
+                         oninput="handleGlobalBoostInput(this.value)">
+                </div>
+                <div class="settings-note ${state.settings.soundBoost > 100 ? 'warn' : ''}">
+                  Amplify quiet clips above 100% output. Stacks with the per-soundboard boost in each category view — excessive boosting may introduce clipping distortion.
+                </div>
+                ${/* Always mounted so the in-place slider updater below can reveal it
+                      without a full re-render (a re-render mid-drag would break the
+                      slider drag lock). Visibility is class-driven. */ ''}
+                <div class="boost-reset-row ${state.settings.soundBoost > 100 ? 'visible' : ''}">
                   <button class="vol-reset-btn" onclick="handleResetGlobalBoost()">Reset to 100%</button>
                 </div>
-              ` : ''}
-            </div>
-          </div>
+              </div>
+            </section>
 
-          <div class="card-section">
-            <div class="card-title">Audio Output Routing</div>
-            <label class="checkbox-row">
-              <input type="checkbox" ${state.settings.allowMultipleOutputs ? 'checked' : ''} onchange="updateSetting('allowMultipleOutputs', this.checked)">
-              <div class="checkbox-label-wrapper">
-                <span class="checkbox-title">Allow multi-device routing</span>
-                <span class="checkbox-desc">Output sound streams to multiple output targets concurrently.</span>
-              </div>
-            </label>
-            <label class="checkbox-row">
-              <input type="checkbox" ${state.settings.useAsDefaultDevice ? 'checked' : ''} onchange="updateSetting('useAsDefaultDevice', this.checked)">
-              <div class="checkbox-label-wrapper">
-                <span class="checkbox-title">Use as Default Devices</span>
-                <span class="checkbox-desc">Inject audio outputs as defaults.</span>
-              </div>
-            </label>
-            
-            <div style="margin-top: var(--spacing-md);">
-              <span class="checkbox-title" style="font-size: 12px; font-weight: 600;">Available Sound Destinations</span>
-              <div class="output-list">
-                ${state.outputDevices.length === 0 ? `
-                  <div class="checkbox-desc">No playback devices recognized</div>
-                ` : state.outputDevices.map(d => {
-                  const isActive = state.settings.outputs.includes(d.name);
-                  return `
-                    <div class="output-item ${isActive ? 'active' : ''}" onclick="toggleOutputDevice('${d.name}')">
-                      <div style="width: 8px; height: 8px; border-radius: 50%; background-color: ${isActive ? 'var(--color-accent)' : 'var(--color-muted)'}; margin-right: 4px;"></div>
-                      <span>${d.name} ${d.isDefault ? '(Default)' : ''}</span>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          </div>
-          
-          <!-- Target Window: exclusive audio routing into a single app -->
-          <div class="card-section">
-            <div class="card-title">Target Window Routing</div>
-            <div style="display: flex; flex-direction: column; gap: var(--spacing-md);">
-              <div class="target-window-desc">
-                ${icons.target}
-                <div>
-                  <div class="checkbox-title">Route soundboard audio into one application</div>
-                  <div class="checkbox-desc">When a target window is selected (e.g. Roblox), sounds are sent exclusively into that app — other programs such as Discord never receive soundboard audio. You always hear the sounds locally too.</div>
+            <!-- Audio Output Routing -->
+            <section class="settings-card">
+              <header class="settings-card-head">
+                <span class="settings-card-icon">${icons.headphones}</span>
+                <div class="settings-card-heading">
+                  <div class="settings-card-title">Audio Output Routing</div>
+                  <div class="settings-card-sub">Where soundboard audio is sent</div>
+                </div>
+              </header>
+              <div class="settings-card-body">
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Allow multi-device routing</span>
+                    <span class="setting-toggle-desc">Stream to multiple output targets at the same time.</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.settings.allowMultipleOutputs ? 'checked' : ''} onchange="updateSetting('allowMultipleOutputs', this.checked)">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Use as default devices</span>
+                    <span class="setting-toggle-desc">Inject audio outputs as system defaults.</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.settings.useAsDefaultDevice ? 'checked' : ''} onchange="updateSetting('useAsDefaultDevice', this.checked)">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
+
+                <div class="settings-field">
+                  <div class="settings-field-label">Available Sound Destinations</div>
+                  <div class="output-list">
+                    ${state.outputDevices.length === 0 ? `
+                      <div class="settings-note inset">No playback devices recognized</div>
+                    ` : state.outputDevices.map(d => {
+                      const isActive = state.settings.outputs.includes(d.name);
+                      return `
+                        <div class="output-item ${isActive ? 'active' : ''}" onclick="toggleOutputDevice('${d.name}')" title="${isActive ? 'Active destination — click to remove' : 'Click to route soundboard audio here'}">
+                          <span class="output-item-check">${isActive ? icons.check : ''}</span>
+                          <span class="output-item-name">${d.name}${d.isDefault ? ' <em>(Default)</em>' : ''}</span>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
                 </div>
               </div>
+            </section>
 
-              <div class="target-window-desc">
-                ${icons.list}
-                <div>
-                  <div class="checkbox-title">All open applications are listed</div>
-                  <div class="checkbox-desc">The picker shows every application you currently have open — pick any of them as the routing target. Open the app you want, then press Refresh to re-scan.</div>
+            <!-- Target Window: exclusive audio routing into a single app -->
+            <section class="settings-card">
+              <header class="settings-card-head">
+                <span class="settings-card-icon">${icons.target}</span>
+                <div class="settings-card-heading">
+                  <div class="settings-card-title">Target Window Routing</div>
+                  <div class="settings-card-sub">Send soundboard audio into one application only</div>
                 </div>
-              </div>
+              </header>
+              <div class="settings-card-body">
+                <div class="settings-note">
+                  When a target window is selected (e.g. Roblox), sounds are sent exclusively into that app — other programs such as Discord never receive soundboard audio. You always hear the sounds locally too.
+                </div>
 
-              <div class="target-window-row">
-                <select id="target-window-select" class="sort-select" style="flex: 1; height: 32px;"
-                        onchange="handleSelectTargetWindow(this.value)">
-                  <option value="" ${!state.settings.targetWindow ? 'selected' : ''}>None — route normally</option>
-                  ${state.settings.targetWindow && !state.openWindows.some(w => w.processName === state.settings.targetWindow) ? `
-                    <option value="${escapeHtml(state.settings.targetWindow)}" selected>
-                      ${escapeHtml(state.settings.targetWindow)} (not running)
-                    </option>
+                <div class="target-window-row">
+                  <select id="target-window-select" class="sort-select" style="flex: 1; height: 32px;"
+                          onchange="handleSelectTargetWindow(this.value)">
+                    <option value="" ${!state.settings.targetWindow ? 'selected' : ''}>None — route normally</option>
+                    ${state.settings.targetWindow && !state.openWindows.some(w => w.processName === state.settings.targetWindow) ? `
+                      <option value="${escapeHtml(state.settings.targetWindow)}" selected>
+                        ${escapeHtml(state.settings.targetWindow)} (not running)
+                      </option>
+                    ` : ''}
+                    ${state.openWindows.map(w => `
+                      <option value="${escapeHtml(w.processName)}" ${state.settings.targetWindow === w.processName ? 'selected' : ''}>
+                        ${escapeHtml(w.title)} (${escapeHtml(w.processName)})
+                      </option>
+                    `).join('')}
+                  </select>
+                  <button class="btn-subtle" style="height: 32px;" title="Re-scan open application windows" onclick="refreshOpenWindows(true)">
+                    ${state.isLoadingWindows ? icons.spinner : icons.refresh} Refresh
+                  </button>
+                </div>
+
+                ${state.settings.targetWindow ? `
+                  <div class="target-window-status ${isTargetWindowRunning() ? 'running' : 'offline'}">
+                    ${isTargetWindowRunning() ? `${icons.target} <span><strong>${escapeHtml(state.settings.targetWindow)}</strong> is running — sounds route exclusively into it and you hear them locally.</span>` : `<span>⚠ <strong>${escapeHtml(state.settings.targetWindow)}</strong> is not open right now. Sounds stay exclusive to it and will not leak to other apps — open the app to send audio to it.</span>`}
+                  </div>
+                  ${!state.isLinux ? `
+                    <div class="settings-note">Tip: make sure the target app listens on the selected output (e.g. set Roblox' microphone to the VB-Cable) so it picks up the soundboard.</div>
                   ` : ''}
-                  ${state.openWindows.map(w => `
-                    <option value="${escapeHtml(w.processName)}" ${state.settings.targetWindow === w.processName ? 'selected' : ''}>
-                      ${escapeHtml(w.title)} (${escapeHtml(w.processName)})
-                    </option>
-                  `).join('')}
-                </select>
-                <button class="btn-subtle" style="height: 32px;" title="Re-scan open application windows" onclick="refreshOpenWindows(true)">
-                  ${state.isLoadingWindows ? icons.spinner : icons.refresh} Refresh
-                </button>
+                ` : (state.openWindows.length === 0 && !state.isLoadingWindows ? `
+                  <div class="settings-note">No open application windows detected${state.isLinux ? ' (Linux lists open windows as best-effort)' : ' — open the app you want to route into, then click Refresh'}.</div>
+                ` : '')}
               </div>
+            </section>
 
-              ${state.settings.targetWindow ? `
-                <div class="target-window-status ${isTargetWindowRunning() ? 'running' : 'offline'}">
-                  ${isTargetWindowRunning() ? `${icons.target} <span><strong>${escapeHtml(state.settings.targetWindow)}</strong> is running — sounds route exclusively into it and you hear them locally.</span>` : `<span>⚠ <strong>${escapeHtml(state.settings.targetWindow)}</strong> is not open right now. Sounds stay exclusive to it and will not leak to other apps — open the app to send audio to it.</span>`}
-                </div>
-                ${!state.isLinux ? `
-                  <div class="checkbox-desc">Tip: make sure the target app listens on the selected output below (e.g. set Roblox' microphone to the VB-Cable) so it picks up the soundboard.</div>
-                ` : ''}
-              ` : (state.openWindows.length === 0 && !state.isLoadingWindows ? `
-                <div class="checkbox-desc">No open application windows detected${state.isLinux ? ' (Linux lists open windows as best-effort)' : ' — open the app you want to route into, then click Refresh'}</div>
-              ` : '')}
-            </div>
+            <!-- OS Specific Tools panels -->
+            ${renderOsSettingsPanel()}
           </div>
-
-          <!-- OS Specific Tools panels -->
-          ${renderOsSettingsPanel()}
         </div>
       </div>
     `;
@@ -4537,25 +4683,157 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
 
   if (state.currentView === 'help') {
     return `
-      <div class="card-section">
-        <div class="card-title">Soundboard Documentation & Help</div>
-        <div style="display: flex; flex-direction: column; gap: var(--spacing-md); font-size: 13px; color: var(--color-secondary); line-height: 1.6;">
-          <p>Welcome to <strong>Audiopad</strong>! This soundboard application allows you to play audio tracks through your output speakers and virtual microphones simultaneously to other channels (e.g. Discord, TeamSpeak, Skype).</p>
-          
-          <h4 style="font-weight: 600; color: var(--color-primary); margin-top: var(--spacing-sm);">Quick Instructions:</h4>
-          <ol style="margin-left: var(--spacing-lg); display: flex; flex-direction: column; gap: var(--spacing-xs);">
-            <li>Add folder directories holding your sound files (*.mp3, *.wav, *.ogg) in the left sidebar directory list.</li>
-            <li>Assign custom shortcuts (hotkeys) by clicking the badge inside the sounds list rows.</li>
-            <li>Configure audio sinks and mic settings in the <strong>Settings</strong> page to verify routing works.</li>
-          </ol>
-          
-          <div style="display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-md);">
+      <div class="help-hub">
+        <!-- Hero banner -->
+        <div class="help-hero">
+          <div class="help-hero-icon">${icons.help}</div>
+          <div class="help-hero-text">
+            <div class="help-hero-title">Soundboard Documentation &amp; Help</div>
+            <div class="help-hero-desc">
+              Welcome to <strong>Audiopad</strong> — play audio tracks through your speakers and into virtual
+              microphones at the same time, so Discord, TeamSpeak, Skype and games all hear your soundboard.
+              Everything below walks you from your first folder to advanced routing.
+            </div>
+          </div>
+          <div class="help-hero-actions">
             <button class="btn-primary" onclick="handleOpenUrl('https://audiopad.vercel.app/')">
-              Visit Website
+              ${icons.openLink} Visit Website
             </button>
-            <button class="btn-primary" style="background-color: var(--color-secondary);" onclick="handleOpenUrl('https://github.com/audiopadapp/audiopad')">
-              Source Code Repository
+            <button class="btn-subtle" onclick="handleOpenUrl('https://github.com/audiopadapp/audiopad')">
+              ${icons.link} Source Code Repository
             </button>
+          </div>
+        </div>
+
+        <!-- Quick start steps -->
+        <div class="help-section">
+          <div class="help-section-title">${icons.rocket} Quick Start</div>
+          <div class="help-steps">
+            <div class="help-step">
+              <div class="help-step-num">1</div>
+              <div class="help-step-body">
+                <div class="help-step-title">Add your sound folders</div>
+                <div class="help-step-desc">
+                  Use <strong>New Folder</strong> or <strong>Add Folder as Category</strong> in the left sidebar —
+                  or simply drag folders in from your file explorer. MP3, WAV and FLAC files are detected
+                  automatically, including nested subfolders.
+                </div>
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-num">2</div>
+              <div class="help-step-body">
+                <div class="help-step-title">Assign hotkeys</div>
+                <div class="help-step-desc">
+                  Click the <span class="help-key">+ Key</span> badge on any sound to record a shortcut.
+                  Hotkeys fire from anywhere on your system — even while Audiopad sits in the background or tray.
+                </div>
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-num">3</div>
+              <div class="help-step-body">
+                <div class="help-step-title">Route your audio</div>
+                <div class="help-step-desc">
+                  Open <strong>Settings &amp; Audio</strong> and pick your destinations. On Windows, the VB-Cable
+                  integration feeds the soundboard straight into your microphone channel; on Linux, choose a
+                  PulseAudio sink or app passthrough.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feature guide -->
+        <div class="help-section">
+          <div class="help-section-title">${icons.bolt} Features at a Glance</div>
+          <div class="help-features">
+            <div class="help-feature">
+              <div class="help-feature-icon">${icons.soundpad}</div>
+              <div class="help-feature-title">Three Sound Views</div>
+              <div class="help-feature-desc">Switch between the Soundpad high-density table, Stream Deck macro pads and the Media Grid from the toolbar at any time.</div>
+            </div>
+            <div class="help-feature">
+              <div class="help-feature-icon">${icons.keyboard}</div>
+              <div class="help-feature-title">Global Hotkeys</div>
+              <div class="help-feature-desc">Every sound can carry its own key combination, plus dedicated Push-To-Talk and emergency Stop shortcuts in Settings.</div>
+            </div>
+            <div class="help-feature">
+              <div class="help-feature-icon">${icons.star}</div>
+              <div class="help-feature-title">Favorites</div>
+              <div class="help-feature-desc">Star sounds in any folder — the Favorites view collects them across all categories for one-tap access.</div>
+            </div>
+            <div class="help-feature">
+              <div class="help-feature-icon">${icons.search}</div>
+              <div class="help-feature-title">Instant Search</div>
+              <div class="help-feature-desc">Press <span class="help-key">Ctrl + F</span> to jump into search. Queries cover the whole folder tree of the active category.</div>
+            </div>
+            <div class="help-feature">
+              <div class="help-feature-icon">${icons.headphones}</div>
+              <div class="help-feature-title">Local &amp; Remote Volume</div>
+              <div class="help-feature-desc"><strong>Local</strong> is what you hear, <strong>Remote</strong> is what everybody else hears — set them globally or override them per sound.</div>
+            </div>
+            <div class="help-feature">
+              <div class="help-feature-icon">${icons.target}</div>
+              <div class="help-feature-title">Target Window Routing</div>
+              <div class="help-feature-desc">Route soundboard audio exclusively into one application (e.g. Roblox) so other programs never receive it.</div>
+            </div>
+            <div class="help-feature">
+              <div class="help-feature-icon">${icons.importIcon}</div>
+              <div class="help-feature-title">Drag &amp; Drop Import</div>
+              <div class="help-feature-desc">Drop audio files or whole folders from the OS file explorer straight into any category — the structure is preserved.</div>
+            </div>
+            <div class="help-feature">
+              <div class="help-feature-icon">${icons.bolt}</div>
+              <div class="help-feature-title">Sound Boost</div>
+              <div class="help-feature-desc">Amplify quiet clips up to 400% — a global boost in Settings plus a separate boost for every soundboard.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shortcuts -->
+        <div class="help-section">
+          <div class="help-section-title">${icons.keyboard} Shortcuts &amp; Controls</div>
+          <div class="help-shortcut-list">
+            <div class="help-shortcut-row">
+              <span class="help-key">Esc</span>
+              <span class="help-shortcut-label">Emergency stop — instantly silences every playing sound</span>
+            </div>
+            <div class="help-shortcut-row">
+              <span class="help-key">Ctrl + F</span>
+              <span class="help-shortcut-label">Focus the sound search field</span>
+            </div>
+            <div class="help-shortcut-row">
+              <span class="help-key">Right-click</span>
+              <span class="help-shortcut-label">Open a sound's context menu — play, assign images, adjust volumes</span>
+            </div>
+            <div class="help-shortcut-row">
+              <span class="help-key">Ctrl + Click</span>
+              <span class="help-shortcut-label">Select multiple sounds to assign images in bulk</span>
+            </div>
+            <div class="help-shortcut-row">
+              <span class="help-key">Double-click</span>
+              <span class="help-shortcut-label">Play a sound directly from the Soundpad table view</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Troubleshooting -->
+        <div class="help-section">
+          <div class="help-section-title">${icons.wrench} Troubleshooting</div>
+          <div class="help-trouble-list">
+            <div class="help-trouble-row">
+              <div class="help-trouble-q">Other apps can't hear my soundboard</div>
+              <div class="help-trouble-a">Open <strong>Settings &amp; Audio</strong> and check <strong>Audio Output Routing</strong>. On Windows, run <strong>Configure Routing</strong> under Windows Routing Tools so the VB-Cable driver is installed and selected — then pick it as the input device inside Discord or your game.</div>
+            </div>
+            <div class="help-trouble-row">
+              <div class="help-trouble-q">My hotkeys stopped working</div>
+              <div class="help-trouble-a">Make sure Audiopad is still running (check the tray icon), and that <strong>Restrict Hotkeys to Active Tab</strong> is not filtering the sound you are triggering — it disables hotkeys from outside the selected category.</div>
+            </div>
+            <div class="help-trouble-row">
+              <div class="help-trouble-q">Sounds cut each other off</div>
+              <div class="help-trouble-a">Enable <strong>Allow Overlapping Sounds</strong> in Settings &amp; Audio so multiple streams can play simultaneously without cutting off.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -4572,17 +4850,20 @@ function renderOsSettingsPanel() {
     const isElevated = !!state.isElevated;
     const selectedName = state.selectedMic ? state.selectedMic.name : '';
     return `
-      <div class="card-section">
-        <div class="card-title">Windows Routing Tools</div>
-        <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+      <section class="settings-card">
+        <header class="settings-card-head">
+          <span class="settings-card-icon">${icons.mic}</span>
+          <div class="settings-card-heading">
+            <div class="settings-card-title">Windows Routing Tools</div>
+            <div class="settings-card-sub">VB-Audio Cable driver and microphone passthrough</div>
+          </div>
+        </header>
+        <div class="settings-card-body">
           ${!isInstalled ? `
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--color-warning-subtle); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-sm);">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 16px;">⚠️</span>
-                <div>
-                  <div style="font-size: 11.5px; font-weight: 600; color: var(--color-warning);">VB-Audio Cable Not Detected</div>
-                  <div style="font-size: 10.5px; color: var(--color-secondary);">Install driver to route soundboard audio into microphone.</div>
-                </div>
+            <div class="settings-alert warn">
+              <div class="settings-alert-body">
+                <div class="settings-alert-title">VB-Audio Cable Not Detected</div>
+                <div class="settings-alert-desc">Install the driver to route soundboard audio into your microphone.</div>
               </div>
               <button class="btn-primary" style="padding: 5px 10px; font-size: 11px;" onclick="window.openUrl && window.openUrl('https://vb-audio.com/Cable/')">
                 Download Cable
@@ -4590,28 +4871,28 @@ function renderOsSettingsPanel() {
             </div>
           ` : ''}
 
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div class="checkbox-label-wrapper">
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <span class="checkbox-title">VB-Audio Cable Integration</span>
+          <div class="settings-inline-row">
+            <div class="setting-toggle-info">
+              <div class="settings-inline-title">
+                <span>VB-Audio Cable Integration</span>
                 <span class="status-pill ${isSetup ? 'active' : (isInstalled ? 'warning' : 'admin')}">
                   ${isSetup ? '● Active' : (isInstalled ? '○ Not Configured' : '○ Missing Driver')}
                 </span>
               </div>
-              <span class="checkbox-desc">
-                ${isSetup && selectedName 
-                  ? `Routing <strong>${selectedName}</strong> audio stream to VB-Cable.` 
-                  : (isInstalled ? `Routes microphone audio to virtual cable output.` : `Requires free VB-Audio Virtual Cable driver.`)}
+              <span class="setting-toggle-desc">
+                ${isSetup && selectedName
+                  ? `Routing <strong>${selectedName}</strong> audio stream to VB-Cable.`
+                  : (isInstalled ? `Routes microphone audio to the virtual cable output.` : `Requires the free VB-Audio Virtual Cable driver.`)}
               </span>
             </div>
-            <button class="btn-primary" style="padding: 5px 10px; font-size: 11px; ${isSetup ? 'background-color: var(--bg-surface); border: 1px solid var(--border-color); color: var(--color-primary);' : ''}" onclick="handleVBCableSetup()">
+            <button class="btn-subtle" onclick="handleVBCableSetup()">
               ${isSetup ? 'Reconfigure' : (isInstalled ? 'Configure Routing' : 'Get Driver')}
             </button>
           </div>
-          
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <label for="mic-override-select" style="font-size: 11px; color: var(--color-secondary);">Override Microphone device</label>
-            <select id="mic-override-select" class="sort-select" style="width: 100%; height: 30px;" onchange="handleMicOverrideChange(this.value)">
+
+          <div class="settings-field">
+            <div class="settings-field-label">Override microphone device</div>
+            <select id="mic-override-select" class="sort-select" style="width: 100%; height: 32px;" onchange="handleMicOverrideChange(this.value)">
               <option value="" ${!isSetup || !state.selectedMic ? 'selected' : ''}>No Override</option>
               ${state.recordingDevices.map(d => {
                 const isSelected = isSetup && state.selectedMic && (state.selectedMic.guid === d.guid || state.selectedMic.name === d.name);
@@ -4619,66 +4900,70 @@ function renderOsSettingsPanel() {
               }).join('')}
             </select>
           </div>
-          
+
           ${isElevated ? `
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--color-active-subtle); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: var(--radius-sm);">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 14px;">🛡️</span>
-                <div>
-                  <div style="font-size: 11.5px; font-weight: 600; color: var(--color-active-signal);">Administrator Privileges</div>
-                  <div style="font-size: 10.5px; color: var(--color-secondary);">Direct audio endpoint permissions active</div>
-                </div>
+            <div class="settings-alert ok">
+              <div class="settings-alert-body">
+                <div class="settings-alert-title">Administrator Privileges</div>
+                <div class="settings-alert-desc">Direct audio endpoint permissions active</div>
               </div>
-              <button class="btn-primary" style="padding: 4px 10px; font-size: 11px; background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--color-primary);" onclick="handleOpenSoundControlPanel()">
+              <button class="btn-subtle" onclick="handleOpenSoundControlPanel()">
                 Sound Control Panel
               </button>
             </div>
           ` : `
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <button class="btn-primary" style="width: 100%; padding: 7px 12px;" onclick="handleRestartAsAdmin()">
+            <div class="settings-field">
+              <button class="btn-primary" style="width: 100%; padding: 8px 12px;" onclick="handleRestartAsAdmin()">
                 🛡️ Elevate Privileges (UAC)
               </button>
-              <button class="btn-primary" style="padding: 5px 10px; font-size: 11px; background: transparent; border: 1px solid var(--border-color); color: var(--color-secondary); width: 100%;" onclick="handleOpenSoundControlPanel()">
+              <button class="btn-subtle" style="width: 100%; justify-content: center;" onclick="handleOpenSoundControlPanel()">
                 Open Sound Control Panel (Manual Fallback)
               </button>
             </div>
           `}
         </div>
-      </div>
+      </section>
     `;
   } else {
     // Linux PulseAudio passthrough settings
     return `
-      <div class="card-section">
-        <div class="card-title">Linux PulseAudio Sinks</div>
-        <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div class="checkbox-label-wrapper">
-              <span class="checkbox-title">PulseAudio Switch-On-Connect</span>
-              <span class="checkbox-desc">Configure PA module connection state.</span>
+      <section class="settings-card">
+        <header class="settings-card-head">
+          <span class="settings-card-icon">${icons.mic}</span>
+          <div class="settings-card-heading">
+            <div class="settings-card-title">Linux PulseAudio Sinks</div>
+            <div class="settings-card-sub">Passthrough and module management</div>
+          </div>
+        </header>
+        <div class="settings-card-body">
+          <div class="settings-inline-row">
+            <div class="setting-toggle-info">
+              <span class="setting-toggle-title">PulseAudio Switch-On-Connect</span>
+              <span class="setting-toggle-desc">Configure the PA module connection state.</span>
             </div>
-            <button class="btn-primary" style="padding: 4px 10px; font-size: 11px;" onclick="handleUnloadSwitchOnConnect()">
+            <button class="btn-subtle" onclick="handleUnloadSwitchOnConnect()">
               Reset Modules
             </button>
           </div>
-          
-          <div style="margin-top: 4px;">
-            <span class="checkbox-title" style="font-size: 11.5px; font-weight: 600;">Running Applications Passthrough</span>
-            <div class="output-list" style="margin-top: 4px;">
+
+          <div class="settings-field">
+            <div class="settings-field-label">Running Applications Passthrough</div>
+            <div class="output-list">
               ${state.playbackApps.length === 0 ? `
-                <div class="checkbox-desc">No running playback apps recognized</div>
+                <div class="settings-note inset">No running playback apps recognized</div>
               ` : state.playbackApps.map(app => {
                 const isPassthroughActive = !!app.passthroughActive;
                 return `
                   <div class="output-item ${isPassthroughActive ? 'active' : ''}" onclick="handleLinuxPassthrough('${app.name}', ${isPassthroughActive})">
-                    <span>${app.name} ${isPassthroughActive ? '(Routing)' : '(No Routing)'}</span>
+                    <span class="output-item-check">${isPassthroughActive ? icons.check : ''}</span>
+                    <span class="output-item-name">${app.name} <em>${isPassthroughActive ? '· Routing' : '· No routing'}</em></span>
                   </div>
                 `;
               }).join('')}
             </div>
           </div>
         </div>
-      </div>
+      </section>
     `;
   }
 }
@@ -4741,6 +5026,16 @@ function handleSelectDockChip(soundKey) {
   renderApp();
 }
 
+//* Status label for the dock's track-info slot. With several sounds playing
+//* the slot shows the CONTROLLED chip, so the label says so — the in-place
+//* updaters reuse this so their 200ms ticks never clobber the multi-sound
+//* wording back to the single-sound one.
+function dockTransportStatusLabel(isPaused) {
+  const playingCount = Object.keys(state.playingSounds).filter(k => state.playingSounds[k]).length;
+  if (playingCount > 1) return 'Controlling this chip';
+  return isPaused ? 'Paused' : 'Playing stream';
+}
+
 function updateDockControlsInPlace() {
   const active = getActivePlayback();
   const isPlaying = active !== null;
@@ -4799,7 +5094,8 @@ function updateDockControlsInPlace() {
     const isPaused = !details || !!details.paused;
     const current = details.readInMs || 0;
     const length = details.lengthInMs || 1;
-    pathEl.textContent = `${isPaused ? 'Paused' : 'Playing stream'} • ${formatMs(current)} / ${formatMs(length)}`;
+    const label = dockTransportStatusLabel(isPaused);
+    pathEl.textContent = `${label} • ${formatMs(current)} / ${formatMs(length)}`;
   }
 
   //* Keep the dock volume module aligned with the settings (e.g. after changes
@@ -5036,12 +5332,6 @@ function updatePlaybackDockInPlace(playingSound) {
     }
 
     const isActiveChip = (String(state.currentPlayingSoundId) === String(soundKey));
-    if (isActiveChip) {
-      const activeHint = document.querySelector('.dock-controlling-hint strong');
-      if (activeHint && playingSound.sound && playingSound.sound.name && activeHint.textContent !== playingSound.sound.name) {
-        activeHint.textContent = playingSound.sound.name;
-      }
-    }
     if (!isActiveChip) {
       //* Not the controlled sound: its chip is now fully up to date and the
       //* transport must NOT be touched with this sound's data.
@@ -5101,7 +5391,7 @@ function updatePlaybackDockInPlace(playingSound) {
 
   const pathEl = document.getElementById('playback-dock-path');
   if (pathEl) {
-    pathEl.textContent = `${isPaused ? 'Paused' : 'Playing stream'} • ${formatMs(current)} / ${formatMs(length)}`;
+    pathEl.textContent = `${dockTransportStatusLabel(isPaused)} • ${formatMs(current)} / ${formatMs(length)}`;
   }
 
   const nameEl = document.getElementById('playback-dock-name');
@@ -5170,27 +5460,30 @@ function renderPlaybackDock() {
   const isLocalMode = state.dockVolumeMode !== 'remote';
   const dockVolume = getDockVolumeValue();
 
-  //* Left block: idle / single-track layout stays as it was; with several
-  //* simultaneous sounds the block swaps to a scrollable chip strip headed by
-  //* a "Now Playing (N)" label.
-  let trackInfoHtml;
-  if (multiMode) {
-    trackInfoHtml = `
-      <div class="dock-multitrack">
+  //* Multi-sound layout: every simultaneously playing sound gets its own chip
+  //* inside a dedicated full-width strip rendered ABOVE the transport row.
+  //* The chips live in their own horizontal list, so they never crowd or
+  //* overlap the playback timeline — the transport bar keeps its full width.
+  const chipsStripHtml = multiMode ? `
+      <div class="dock-multitrack-strip">
         <div class="dock-multitrack-head">
           <span class="dock-playing-count" title="${playingList.length} sounds playing simultaneously">
             <span class="eq-bars compact"><span class="eq-bar"></span><span class="eq-bar"></span><span class="eq-bar"></span></span>
             Now Playing (${playingList.length})
           </span>
-          <span class="dock-multitrack-hint">click a chip to control it</span>
+          <span class="dock-multitrack-hint">click a chip to control it — the bar below drives the highlighted chip</span>
         </div>
         <div class="dock-chips-row">
           ${playingList.map(entry => renderDockSoundChip(entry, String(entry.key) === String(active ? active.soundKey : null))).join('')}
         </div>
       </div>
-    `;
-  } else {
-    trackInfoHtml = `
+    ` : '';
+
+  //* Track info slot: single mode shows the one playing sound; multi mode
+  //* shows the CONTROLLED sound (the highlighted chip) in the same compact
+  //* slot, so the transport bar always carries a clear readout of what the
+  //* timeline and the buttons act on.
+  const trackInfoHtml = `
       <div id="dock-eq-bars" class="eq-bars ${isPaused ? 'paused' : ''}" style="${isPlaying && details && details.sound ? '' : 'display: none;'}" title="${isPaused ? 'Playback Paused' : 'Playing Audio Stream'}">
         <span class="eq-bar"></span>
         <span class="eq-bar"></span>
@@ -5203,24 +5496,30 @@ function renderPlaybackDock() {
           ${isPlaying && details && details.sound ? (details.sound.name || 'Active Sound') : 'Soundboard Ready'}
         </span>
         <span id="playback-dock-path" class="dock-track-sub">
-          ${isPlaying && details && details.sound ? `${isPaused ? 'Paused' : 'Playing stream'} • ${formatMs(current)} / ${formatMs(length)}` : 'Press hotkey or trigger sound pad'}
+          ${isPlaying && details && details.sound ? `${multiMode ? 'Controlling this chip' : (isPaused ? 'Paused' : 'Playing stream')} • ${formatMs(current)} / ${formatMs(length)}` : 'Press hotkey or trigger sound pad'}
         </span>
       </div>
     `;
-  }
 
   return `
-    <footer id="playback-dock">
-      <div class="dock-track-info ${multiMode ? 'multi' : ''}">
+    <footer id="playback-dock" class="${multiMode ? 'multi' : ''}">
+      ${chipsStripHtml}
+      <div class="dock-track-info">
         ${trackInfoHtml}
       </div>
       
       <div class="dock-center-transport">
-        ${multiMode && details && details.sound ? `
-          <span class="dock-controlling-hint" title="The controls below act on this sound">
-            Controlling: <strong>${escapeHtml(details.sound.name || 'Active Sound')}</strong>
-          </span>
-        ` : ''}
+        <div class="dock-scrub-row">
+          <span id="playback-dock-current" class="dock-time-text">${formatMs(current)}</span>
+          <div id="playback-dock-bar" class="progress-bar-wrapper" 
+               style="cursor: ${isPlaying ? 'pointer' : 'default'};" 
+               onpointerdown="${isPlaying ? 'handleScrubberPointerDown(event)' : ''}">
+            <div id="playback-dock-fill" class="progress-bar-fill" style="width: ${percentage}%"></div>
+            <div id="playback-dock-thumb" class="progress-bar-thumb" style="left: ${percentage}%; display: ${isPlaying ? 'block' : 'none'};"></div>
+          </div>
+          <span id="playback-dock-length" class="dock-time-text">${formatMs(length)}</span>
+        </div>
+
         <div class="dock-transport-controls">
           <button id="dock-btn-repeat" class="action-btn ${details && details.repeat ? 'active' : ''}" 
                   style="color: ${details && details.repeat ? 'var(--color-accent)' : 'inherit'};" 
@@ -5241,17 +5540,6 @@ function renderPlaybackDock() {
                   onclick="event.stopPropagation(); handleStopActiveSound()">
             ${icons.stop}
           </button>
-        </div>
-
-        <div class="dock-scrub-row">
-          <span id="playback-dock-current" class="dock-time-text">${formatMs(current)}</span>
-          <div id="playback-dock-bar" class="progress-bar-wrapper" 
-               style="cursor: ${isPlaying ? 'pointer' : 'default'};" 
-               onpointerdown="${isPlaying ? 'handleScrubberPointerDown(event)' : ''}">
-            <div id="playback-dock-fill" class="progress-bar-fill" style="width: ${percentage}%"></div>
-            <div id="playback-dock-thumb" class="progress-bar-thumb" style="left: ${percentage}%; display: ${isPlaying ? 'block' : 'none'};"></div>
-          </div>
-          <span id="playback-dock-length" class="dock-time-text">${formatMs(length)}</span>
         </div>
       </div>
       

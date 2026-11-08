@@ -70,11 +70,11 @@ if (UNIX)
     target_include_directories(audiopad SYSTEM PRIVATE ${X11_INCLUDE_DIR} ${PULSEAUDIO_INCLUDE_DIR} ${PipeWire_INCLUDE_DIRS} ${Spa_INCLUDE_DIRS}) 
 
     find_package(PkgConfig REQUIRED)
-	pkg_check_modules(WNCK libwnck-3.0)
+        pkg_check_modules(WNCK libwnck-3.0)
     target_link_libraries(audiopad PRIVATE ${X11_LIBRARIES} ${X11_Xinput_LIB} ${X11_XTest_LIB})
 endif()
 if (WIN32)
-    target_compile_definitions(audiopad PRIVATE _CRT_SECURE_NO_WARNINGS=1 _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1 _UNICODE=1)
+    target_compile_definitions(audiopad PRIVATE _CRT_SECURE_NO_WARNINGS=1 _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1 UNICODE=1 _UNICODE=1)
 endif()
 
 add_subdirectory(src/ui/impl/webview/lib/webviewpp EXCLUDE_FROM_ALL)
