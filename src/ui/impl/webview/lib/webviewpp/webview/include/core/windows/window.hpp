@@ -55,6 +55,25 @@ namespace Webview
         Window(std::string identifier, std::size_t width, std::size_t height);
         void disableAcceleratorKeys(bool);
 
+        //* --- Custom chrome (frameless window) ---
+        //* Removes the native caption bar so the web UI can render its own topbar.
+        //* The resize frame (WS_THICKFRAME) is deliberately kept: the OS continues
+        //* to handle edge resizing, Aero Snap and the drop shadow.
+        void enableFramelessWindow();
+
+        //* Minimizes the window (with the usual taskbar animation).
+        void minimize();
+        //* Toggles between maximized and restored.
+        void toggleMaximize();
+        //* Requests a close through the regular WM_CLOSE path so close callbacks
+        //* (e.g. minimize-to-tray) keep working.
+        void requestClose();
+        //* Whether the window is currently maximized.
+        bool isMaximized() const;
+        //* Starts the native system move loop from a pointer press inside the web
+        //* UI (drag-by-topbar). Enables Aero Snap while dragging.
+        void startDrag();
+
         //* Registers the handler for files/folders dragged in from the OS file
         //* manager. The handler receives the real file system paths (UTF-8) and
         //* the drop position in client coordinates (physical pixels); the

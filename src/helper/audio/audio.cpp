@@ -67,7 +67,8 @@ namespace Audiopad::Objects
         return factor > 16.f ? 16.f : factor;
     }
     std::optional<PlayingSound> Audio::play(const Objects::Sound &sound,
-                                            const std::optional<Objects::AudioDevice> &playbackDevice)
+                                            const std::optional<Objects::AudioDevice> &playbackDevice,
+                                            bool isRemoteStream, bool reportsProgress)
     {
         static std::atomic<std::uint32_t> id = 0;
 
@@ -147,7 +148,7 @@ namespace Audiopad::Objects
             ma_decoder_get_length_in_pcm_frames(decoder, &length_in_pcm_frames);
         }
 
-        if (playbackDevice)
+        if (isRemoteStream)
         {
             if (sound.remoteVolume)
             {
@@ -189,6 +190,8 @@ namespace Audiopad::Objects
         pSound->sound = sound;
         pSound->raw.device = device;
         pSound->raw.decoder = decoder;
+        pSound->isRemote = isRemoteStream;
+        pSound->reportsProgress = reportsProgress;
         //* Capture the boost gain on a shared atomic — the data callback amplifies the decoded
         //* frames with it (miniaudio's masterVolumeFactor only attenuates, values above 1 are ignored).
         pSound->raw.boostFactor = std::make_shared<std::atomic<float>>(getBoostFactor(sound.id));
@@ -411,7 +414,7 @@ namespace Audiopad::Objects
         }
         sound->buffer = 0;
 
-        if (Globals::gGui && sound->playbackDevice.isDefault)
+        if (Globals::gGui && sound->reportsProgress)
         {
             Globals::gGui->onSoundProgressed(*sound);
         }
@@ -591,7 +594,7 @@ namespace Audiopad::Objects
             }
         }
 
-        if (sound->playbackDevice.isDefault && readFrames > 0)
+        if (sound->reportsProgress && readFrames > 0)
         {
             Globals::gAudio.onSoundProgressed(sound, readFrames);
         }
@@ -720,6 +723,8 @@ namespace Audiopad::Objects
         raw.decoder.store(other.raw.decoder);
         raw.boostFactor = other.raw.boostFactor;
         playbackDevice = other.playbackDevice;
+        isRemote = other.isRemote;
+        reportsProgress = other.reportsProgress;
     }
     PlayingSound &PlayingSound::operator=(const PlayingSound &other)
     {
@@ -747,6 +752,8 @@ namespace Audiopad::Objects
         raw.decoder.store(other.raw.decoder);
         raw.boostFactor = other.raw.boostFactor;
         playbackDevice = other.playbackDevice;
+        isRemote = other.isRemote;
+        reportsProgress = other.reportsProgress;
 
         return *this;
     }

@@ -1188,8 +1188,8 @@ namespace Audiopad::Objects
                 Globals::gHotKeys.pressKeys(Globals::gSettings.pushToTalkKeys);
             }
 
-            auto playingSound = Globals::gAudio.play(*sound);
-            auto remotePlayingSound = Globals::gAudio.play(*sound, Globals::gAudio.nullSink);
+            auto playingSound = Globals::gAudio.play(*sound, std::nullopt, false, true);
+            auto remotePlayingSound = Globals::gAudio.play(*sound, Globals::gAudio.nullSink, true, false);
 
             if (playingSound && remotePlayingSound)
             {
@@ -1264,9 +1264,28 @@ namespace Audiopad::Objects
 #else
     namespace
     {
+        //* Heuristic for virtual audio cables / virtual mixers: devices whose names
+        //* carry these markers are not physical speakers or headphones, so they are
+        //* never a good "hear it yourself" monitor endpoint.
+        bool isVirtualAudioDevice(const std::string &name)
+        {
+            const auto lowered = toLower(name);
+            return lowered.find("cable") != std::string::npos ||
+                   lowered.find("vb-audio") != std::string::npos ||
+                   lowered.find("voicemeeter") != std::string::npos ||
+                   lowered.find("virtual") != std::string::npos;
+        }
+
+        bool isSameAudioDevice(const AudioDevice &left, const AudioDevice &right)
+        {
+            return left.name == right.name;
+        }
+
         //* Resolves the playback device used to feed the target window. Prefers the
         //* explicitly configured output; otherwise falls back to the VB-Cable device,
         //* which is the standard virtual-microphone pathway other apps listen on.
+        //* A cable that happens to be the system default is still a valid target —
+        //* being the default must not disqualify it.
         std::optional<AudioDevice> findTargetOutputDevice()
         {
             if (!Globals::gSettings.outputs.empty())
@@ -1280,7 +1299,56 @@ namespace Audiopad::Objects
 
             for (const auto &device : Globals::gAudio.getAudioDevices())
             {
-                if (!device.isDefault && toLower(device.name).find("cable") != std::string::npos)
+                if (toLower(device.name).find("cable") != std::string::npos)
+                {
+                    return device;
+                }
+            }
+
+            return std::nullopt;
+        }
+
+        //* Resolves the device the soundboard user personally listens on while a
+        //* target window is active:
+        //*   1. the system default — unless it is the target device itself (e.g. the
+        //*      VB-Cable is set as Windows default, a common Voicemeeter setup);
+        //*   2. otherwise the first render device that is neither the target nor a
+        //*      virtual cable/mixer — i.e. the user's real speakers or headphones;
+        //*   3. nothing, when the target already is an audible local device — the
+        //*      target stream itself is what the user hears.
+        std::optional<AudioDevice> findLocalMonitorDevice(const std::optional<AudioDevice> &targetDevice)
+        {
+            const auto devices = Globals::gAudio.getAudioDevices();
+
+            std::optional<AudioDevice> defaultDevice;
+            for (const auto &device : devices)
+            {
+                if (device.isDefault)
+                {
+                    defaultDevice = device;
+                    break;
+                }
+            }
+
+            if (defaultDevice && (!targetDevice || !isSameAudioDevice(*defaultDevice, *targetDevice)))
+            {
+                return defaultDevice;
+            }
+
+            if (!targetDevice || !isVirtualAudioDevice(targetDevice->name))
+            {
+                //* The target is the user's own (audible) default device — the target
+                //* stream doubles as the local monitor, no second stream needed.
+                return std::nullopt;
+            }
+
+            for (const auto &device : devices)
+            {
+                if (targetDevice && isSameAudioDevice(device, *targetDevice))
+                {
+                    continue;
+                }
+                if (!isVirtualAudioDevice(device.name))
                 {
                     return device;
                 }
@@ -1316,49 +1384,91 @@ namespace Audiopad::Objects
 
             //* Target window mode: the remote stream plays exclusively into the target's
             //* audio pathway (the configured output / VB-Cable). Other chat programs do
-            //* not receive the soundboard audio because it never touches them.
+            //* not receive the soundboard audio because it never touches them. A second
+            //* local monitor stream guarantees the user always hears what is being sent:
+            //* when the target device is the system default (a common VB-Cable/Voicemeeter
+            //* setup) the monitor is rerouted to the first real speaker/headphone device
+            //* instead of silently vanishing into the virtual cable.
             if (Globals::gSettings.targetWindow)
             {
-                auto playingSound = Globals::gAudio.play(*sound);
                 auto targetDevice = findTargetOutputDevice();
 
-                if (targetDevice && !targetDevice->isDefault)
+                //* No virtual pathway available at all — fall back to the default device so
+                //* the target app at least receives audio when it listens on the default.
+                if (!targetDevice)
                 {
-                    auto remotePlayingSound = Globals::gAudio.play(*sound, targetDevice);
-                    if (playingSound && remotePlayingSound)
+                    for (const auto &device : Globals::gAudio.getAudioDevices())
                     {
-                        groupedSounds->insert({playingSound->id, remotePlayingSound->id});
-                        onSoundPlayed(*playingSound);
-                        return *playingSound;
+                        if (device.isDefault)
+                        {
+                            targetDevice = device;
+                            break;
+                        }
                     }
 
-                    if (playingSound)
-                        stopSound(playingSound->id);
-
-                    if (remotePlayingSound)
-                        stopSound(remotePlayingSound->id);
-
-                    Fancy::fancy.logTime().failure() << "Failed to play sound " << id << std::endl;
-                    onError(Enums::ErrorCode::FailedToPlay);
-                    return std::nullopt;
+                    if (targetDevice)
+                    {
+                        Fancy::fancy.logTime().warning()
+                            << "Target window '" << *Globals::gSettings.targetWindow
+                            << "' has no virtual output device to route through — falling back to the default device"
+                            << std::endl;
+                    }
                 }
 
-                //* No dedicated output device available for the target — keep the sound
-                //* local-only and inform the user instead of leaking it elsewhere.
-                Fancy::fancy.logTime().warning()
-                    << "Target window '" << *Globals::gSettings.targetWindow
-                    << "' has no output device to route through — playing locally only" << std::endl;
-                onError(Enums::ErrorCode::FailedToMoveToSink);
-                if (playingSound)
+                const auto monitorDevice = findLocalMonitorDevice(targetDevice);
+                const bool dualStream = monitorDevice && targetDevice &&
+                                       !isSameAudioDevice(*monitorDevice, *targetDevice);
+
+                std::optional<PlayingSound> localSound;
+                std::optional<PlayingSound> remoteSound;
+
+                if (dualStream)
                 {
-                    onSoundPlayed(*playingSound);
+                    //* The monitor is the stream the user hears — it drives the UI progress.
+                    localSound = Globals::gAudio.play(*sound, monitorDevice, false, true);
+                    remoteSound = Globals::gAudio.play(*sound, targetDevice, true, false);
                 }
-                return playingSound;
+                else if (targetDevice)
+                {
+                    //* Single stream: the target device is already audible to the user, or no
+                    //* separate monitor device exists. It feeds the target and doubles as the
+                    //* progress-reporting stream.
+                    remoteSound = Globals::gAudio.play(*sound, targetDevice, true, true);
+                }
+
+                if (localSound && remoteSound)
+                {
+                    groupedSounds->insert({localSound->id, remoteSound->id});
+                    onSoundPlayed(*localSound);
+                    return *localSound;
+                }
+
+                //* Graceful degradation: never kill a working stream just because its
+                //* partner failed to start.
+                if (localSound)
+                {
+                    Fancy::fancy.logTime().warning()
+                        << "Target window '" << *Globals::gSettings.targetWindow
+                        << "' stream could not start — playing locally only" << std::endl;
+                    onError(Enums::ErrorCode::FailedToMoveToSink);
+                    onSoundPlayed(*localSound);
+                    return *localSound;
+                }
+
+                if (remoteSound)
+                {
+                    onSoundPlayed(*remoteSound);
+                    return *remoteSound;
+                }
+
+                Fancy::fancy.logTime().failure() << "Failed to play sound " << id << std::endl;
+                onError(Enums::ErrorCode::FailedToPlay);
+                return std::nullopt;
             }
 
             if (Globals::gSettings.outputs.empty() && !Globals::gSettings.useAsDefaultDevice)
             {
-                auto playingSound = Globals::gAudio.play(*sound);
+                auto playingSound = Globals::gAudio.play(*sound, std::nullopt, false, true);
                 if (playingSound)
                 {
                     onSoundPlayed(*playingSound);
@@ -1366,12 +1476,24 @@ namespace Audiopad::Objects
                 return playingSound;
             }
 
-            auto playingSound = Globals::gAudio.play(*sound);
+            if (Globals::gSettings.outputs.empty())
+            {
+                //* "Use as default device" with no explicit outputs — a single stream on
+                //* the default device is all we can do (and all we need).
+                auto playingSound = Globals::gAudio.play(*sound, std::nullopt, false, true);
+                if (playingSound)
+                {
+                    onSoundPlayed(*playingSound);
+                }
+                return playingSound;
+            }
+
+            auto playingSound = Globals::gAudio.play(*sound, std::nullopt, false, true);
             auto playbackDevice = Globals::gAudio.getAudioDevice(Globals::gSettings.outputs.front());
 
             if (playbackDevice && !playbackDevice->isDefault)
             {
-                auto remotePlayingSound = Globals::gAudio.play(*sound, playbackDevice);
+                auto remotePlayingSound = Globals::gAudio.play(*sound, playbackDevice, true, false);
                 if (playingSound && remotePlayingSound)
                 {
                     groupedSounds->insert({playingSound->id, remotePlayingSound->id});
@@ -1394,7 +1516,7 @@ namespace Audiopad::Objects
             {
                 onSoundPlayed(*playingSound);
             }
-            return *playingSound;
+            return playingSound;
         }
 
         Fancy::fancy.logTime().failure() << "Sound " << id << " not found" << std::endl;
@@ -1407,7 +1529,11 @@ namespace Audiopad::Objects
         std::optional<std::uint32_t> resolveRemoteSoundId(
             sxl::var_guard<std::map<std::uint32_t, std::uint32_t>> &groupedSounds, const std::uint32_t &id)
         {
-            if (Globals::gSettings.outputs.empty() || Globals::gSettings.useAsDefaultDevice)
+            //* With a target window active the remote stream can exist even without
+            //* explicitly configured outputs (the cable is auto-detected), so the
+            //* pairing must stay resolvable in that mode too.
+            if ((Globals::gSettings.outputs.empty() && !Globals::gSettings.targetWindow) ||
+                Globals::gSettings.useAsDefaultDevice)
             {
                 return std::nullopt;
             }
@@ -1593,7 +1719,7 @@ namespace Audiopad::Objects
 
             for (auto &playingSound : Globals::gAudio.getPlayingSounds())
             {
-                if (playingSound.sound.id == sound->get().id && playingSound.playbackDevice.isDefault)
+                if (playingSound.sound.id == sound->get().id && !playingSound.isRemote)
                 {
                     playingSound.raw.device.load()->masterVolumeFactor =
                         static_cast<float>(localVolume ? *localVolume : Globals::gSettings.localVolume) / 100.f;
@@ -1622,7 +1748,7 @@ namespace Audiopad::Objects
 
             for (auto &playingSound : Globals::gAudio.getPlayingSounds())
             {
-                if (playingSound.sound.id == sound->get().id && !playingSound.playbackDevice.isDefault)
+                if (playingSound.sound.id == sound->get().id && playingSound.isRemote)
                 {
                     playingSound.raw.device.load()->masterVolumeFactor =
                         static_cast<float>(remoteVolume ? *remoteVolume : Globals::gSettings.remoteVolume) / 100.f;
@@ -1656,7 +1782,11 @@ namespace Audiopad::Objects
                 int newVolume = 0;
                 const auto &sound = playingSound.sound;
 
-                if (playingSound.playbackDevice.isDefault)
+                //* The stream role flag decides which volume applies — the local
+                //* monitor is not necessarily the system default device (e.g. when
+                //* a VB-Cable is set as Windows default, the monitor runs on an
+                //* explicit speaker device instead).
+                if (!playingSound.isRemote)
                 {
                     newVolume = sound.localVolume ? *sound.localVolume : Globals::gSettings.localVolume;
                 }

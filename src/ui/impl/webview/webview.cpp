@@ -49,6 +49,11 @@ namespace Audiopad::Objects
         tray = std::make_shared<Tray::Tray>("audiopad-tray", IDI_ICON1);
 
         webview->disableAcceleratorKeys(true);
+
+        //* The app draws its own topbar (brand, drag region, window controls) inside
+        //* the web UI — drop the native caption so only one topbar exists. Resize,
+        //* Aero Snap and the DWM shadow survive via the kept sizing frame.
+        webview->enableFramelessWindow();
 #endif
 #if defined(__linux__)
         auto path = std::filesystem::canonical("/proc/self/exe").parent_path() / "dist" / "index.html";
@@ -244,6 +249,22 @@ namespace Audiopad::Objects
 
         //* --- Target Window (exclusive audio routing) & nested folder support ---
         webview->expose(Webview::Function("getAppWindows", []() { return Objects::getAppWindows(); }));
+
+#if defined(_WIN32)
+        //* --- Custom topbar window controls ---
+        //* Windows runs frameless: the web topbar needs native helpers for moving,
+        //* minimizing, maximizing and closing. Linux keeps its native titlebar —
+        //* the bindings simply do not exist there and the frontend hides the
+        //* controls (every call site guards on the binding's presence).
+        webview->expose(Webview::Function("startWindowDrag", [this]() { webview->startDrag(); }));
+        webview->expose(Webview::Function("minimizeWindow", [this]() { webview->minimize(); }));
+        webview->expose(Webview::Function("maximizeWindow", [this]() { webview->toggleMaximize(); }));
+        //* Goes through WM_CLOSE so the minimize-to-tray setting keeps working.
+        webview->expose(Webview::Function("closeWindow", [this]() { webview->requestClose(); }));
+        webview->expose(Webview::Function("isWindowMaximized", [this]() -> bool {
+            return webview->isMaximized();
+        }));
+#endif
         webview->expose(Webview::Function("pickImportFolder", [this]() -> std::string {
             auto picked = pickFolderDialog();
             return picked ? *picked : "";

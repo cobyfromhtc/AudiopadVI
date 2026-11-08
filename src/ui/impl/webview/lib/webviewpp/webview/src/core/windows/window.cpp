@@ -523,6 +523,112 @@ void Webview::Window::setFileDropCallback(std::function<void(std::vector<std::st
     fileDropCallback = std::move(callback);
 }
 
+void Webview::Window::enableFramelessWindow()
+{
+    if (!hwnd)
+    {
+        return;
+    }
+
+    //* Strip only the caption (titlebar + native min/max/close buttons) while
+    //* keeping the sizing frame. WS_THICKFRAME preserves OS-managed edge
+    //* resizing, Aero Snap and the DWM drop shadow — so the web UI gets a clean
+    //* canvas for its own topbar without losing any native window behaviour.
+    auto style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    style &= ~(static_cast<LONG_PTR>(WS_CAPTION));
+    style |= WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+    SetWindowLongPtr(hwnd, GWL_STYLE, style);
+
+    //* SWP_FRAMECHANGED makes Windows recompute the non-client area; the size
+    //* flags keep the current position/size untouched.
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+
+    //* The client area grew by the height of the removed caption — resize the
+    //* WebView2 controller so the page fills the new space immediately. When the
+    //* controller is not ready yet (its creation is asynchronous), queue the
+    //* bounds update so it runs the moment creation completes.
+    if (webViewController)
+    {
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        webViewController->put_Bounds(rc);
+    }
+    else
+    {
+        runOnControllerCreated.emplace_back([this] {
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            webViewController->put_Bounds(rc);
+        });
+    }
+}
+
+void Webview::Window::minimize()
+{
+    if (!hwnd)
+    {
+        return;
+    }
+
+    //* Must run on the window's UI thread — dispatchMessage hops over from
+    //* whichever thread the binding was invoked on.
+    dispatchMessage([this] { ShowWindow(hwnd, SW_MINIMIZE); });
+}
+
+void Webview::Window::toggleMaximize()
+{
+    if (!hwnd)
+    {
+        return;
+    }
+
+    dispatchMessage([this] {
+        if (IsZoomed(hwnd))
+        {
+            ShowWindow(hwnd, SW_RESTORE);
+        }
+        else
+        {
+            ShowWindow(hwnd, SW_MAXIMIZE);
+        }
+    });
+}
+
+void Webview::Window::requestClose()
+{
+    if (!hwnd)
+    {
+        return;
+    }
+
+    dispatchMessage([this] { PostMessage(hwnd, WM_CLOSE, 0, 0); });
+}
+
+bool Webview::Window::isMaximized() const
+{
+    return hwnd && IsZoomed(hwnd) != FALSE;
+}
+
+void Webview::Window::startDrag()
+{
+    if (!hwnd)
+    {
+        return;
+    }
+
+    dispatchMessage([this] {
+        //* Hand the pointer press to the OS as if it happened on a caption:
+        //* WM_NCLBUTTONDOWN with HTCAPTION enters the native move loop (with
+        //* Aero Snap previews). Runs on the UI thread where the modal loop can
+        //* pump messages freely.
+        ReleaseCapture();
+        POINT cursor{};
+        GetCursorPos(&cursor);
+        SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(cursor.x, cursor.y));
+    });
+}
+
 void Webview::Window::Window::disableAcceleratorKeys(bool state)
 {
     if (!webViewController)

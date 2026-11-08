@@ -6,8 +6,15 @@
 
 /* --- Design Tokens: Neutral-First Professional Audio Software --- */
 :root {
+  /* Floating Shell Geometry
+     Every chrome panel (topbar, sidebar, toolbar, transport dock) is a
+     self-contained rounded card; the app canvas peeks through a uniform
+     gutter on all four window edges so nothing reads as docked. */
+  --shell-gap: 8px;
+  --panel-radius: 8px;
+
   /* Window & Surface Hierarchy (Dark Charcoal / Graphite Studio Default) */
-  --bg-app: #101216;
+  --bg-app: #0b0d11;
   --bg-sidebar: #14171d;
   --bg-header: #14171d;
   --bg-surface: #1a1e24;
@@ -74,6 +81,9 @@
 html.light-theme,
 body.light-theme,
 .light-theme {
+  --shell-gap: 8px;
+  --panel-radius: 8px;
+
   --bg-app: #f0f2f5;
   --bg-sidebar: #e6e9ee;
   --bg-header: #e6e9ee;
@@ -112,6 +122,9 @@ body.light-theme,
   :root:not(.dark-theme),
   html:not(.dark-theme),
   body:not(.dark-theme) {
+    --shell-gap: 8px;
+    --panel-radius: 8px;
+
     --bg-app: #f0f2f5;
     --bg-sidebar: #e6e9ee;
     --bg-header: #e6e9ee;
@@ -174,6 +187,10 @@ html, body {
 }
 
 /* Custom App Host Shell */
+/* The host is a padded canvas: the window background (bg-app) shows through
+   a uniform --shell-gap gutter on every edge, and each chrome panel inside
+   becomes a self-contained rounded card. Nothing touches the window edges,
+   so the whole interface reads as floating rather than docked. */
 #custom-app {
   width: 100%;
   height: 100%;
@@ -181,6 +198,8 @@ html, body {
   flex-direction: column;
   overflow: hidden;
   background-color: var(--bg-app);
+  padding: var(--shell-gap);
+  gap: var(--shell-gap);
 }
 
 /* Native Desktop Scrollbars */
@@ -213,20 +232,101 @@ html, body {
   width: 100%;
   overflow: hidden;
   background-color: var(--bg-app);
+  /* Same gutter between the sidebar card and the workspace card */
+  gap: var(--shell-gap);
+}
+
+/* --- Custom Window Topbar (replaces the native caption) --- */
+/* Floating titlebar card: inset from the window edges on all sides, rounded
+   on every corner and carrying the brand on the left, the window controls on
+   the right, and doubling as the drag region in between. The empty gutter
+   around it stays draggable via the shell-level pointer handler.
+   On Linux the native titlebar remains, so only the brand is shown. */
+.app-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  height: 38px;
+  flex: 0 0 auto;
+  padding: 0 var(--space-2xs) 0 var(--space-md);
+  background-color: var(--bg-header);
+  border: 1px solid var(--border-color);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--shadow-sm);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  pointer-events: none;
+}
+
+.topbar-drag-hint {
+  flex: 1 1 auto;
+  align-self: stretch;
+}
+
+.topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  height: 100%;
+  padding-right: 3px;
+}
+
+/* Inside the rounded topbar card the caption buttons are compact rounded
+   chips instead of edge-to-edge strips — square hover blocks would poke out
+   over the card's rounded corners. */
+.topbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.topbar-btn:hover {
+  background-color: var(--bg-surface-hover);
+  color: var(--color-primary);
+}
+
+.topbar-btn:active {
+  background-color: var(--bg-surface-active);
+}
+
+.topbar-close:hover {
+  background-color: #dc2626;
+  color: #ffffff;
+}
+
+.topbar-close:active {
+  background-color: #b91c1c;
+  color: #ffffff;
 }
 
 /* --- Left Navigation Rail (Desktop Sidebar) --- */
-/* Full-height rail: flush with the window's left edge and stretching all the
-   way to the bottom of the screen. The right-hand corners are softened so the
-   rail reads as a modern floating panel while still spanning the full height. */
+/* Floating full-height card: rounded on every corner and separated from the
+   window edges, the topbar and the workspace by the uniform shell gutter,
+   matching the transport dock and toolbar cards. */
 .custom-sidebar {
   position: relative;
   width: var(--sidebar-width, 216px);
   min-width: var(--sidebar-min-width, 180px);
   max-width: var(--sidebar-max-width, 420px);
   background-color: var(--bg-sidebar);
-  border-right: 1px solid var(--border-color);
-  border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -282,21 +382,8 @@ body.sidebar-resizing .sidebar-resize-handle {
   pointer-events: auto;
 }
 
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: var(--space-xs);
-}
-
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
+/* Brand styling is shared by the window topbar (the sidebar header was folded
+   into the topbar so the brand only appears once). */
 .sidebar-logo {
   display: flex;
   align-items: center;
@@ -624,12 +711,17 @@ body.sidebar-drag-active .sidebar-drop-zone {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  row-gap: 8px;
+  min-width: 0;
 }
 
+/* The boost cluster is atomic — it never shrinks, so its value badge can not
+   be crushed into the neighbouring sort dropdown. */
 .boost-control {
   display: flex;
   align-items: center;
   gap: 7px;
+  flex-shrink: 0;
 }
 
 .boost-control-label {
@@ -717,6 +809,9 @@ body.sidebar-drag-active .sidebar-drop-zone {
 }
 
 /* Top Desktop Toolbar Header */
+/* Floating toolbar card: flush with the main column rails so every gutter in
+   the shell — window edge → topbar → sidebar → toolbar → content → dock —
+   is the same uniform --shell-gap width. */
 .main-header {
   min-height: 48px;
   display: flex;
@@ -724,9 +819,11 @@ body.sidebar-drag-active .sidebar-drop-zone {
   justify-content: space-between;
   flex-wrap: wrap;
   row-gap: 6px;
-  padding: 4px var(--space-lg);
+  padding: 4px var(--space-md);
   background-color: var(--bg-header);
-  border-bottom: 1px solid var(--border-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--shadow-sm);
   gap: var(--space-sm) var(--space-md);
   user-select: none;
 }
@@ -736,9 +833,12 @@ body.sidebar-drag-active .sidebar-drop-zone {
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
-  flex-shrink: 1;
+  flex: 0 1 auto;
 }
 
+/* Long folder / soundboard names must truncate instead of crowding the header
+   actions — a medium-sized name used to squeeze the output selector and push
+   the toolbar controls into each other. */
 .header-title {
   font-size: 14px;
   font-weight: 700;
@@ -747,6 +847,9 @@ body.sidebar-drag-active .sidebar-drop-zone {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: clamp(120px, 24vw, 320px);
 }
 
 .status-pill {
@@ -759,6 +862,14 @@ body.sidebar-drag-active .sidebar-drop-zone {
   gap: 4px;
   white-space: nowrap;
   letter-spacing: 0.02em;
+  min-width: 0;
+  max-width: 200px;
+  overflow: hidden;
+}
+
+.status-pill > span,
+.status-pill > svg {
+  flex-shrink: 0;
 }
 
 .status-pill.active {
@@ -788,6 +899,7 @@ body.sidebar-drag-active .sidebar-drop-zone {
   row-gap: 6px;
   gap: var(--space-sm);
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 /* Shared compact range slider (volume popovers, boost, playback dock) */
@@ -971,10 +1083,14 @@ body.sidebar-drag-active .sidebar-drop-zone {
 }
 
 /* --- Workspace Content Canvas --- */
+/* Vertical padding keeps the uniform gutter below the toolbar card and above
+   the transport dock; horizontally the content cards run on the same rails
+   as the toolbar and dock (the shell gap already separates them from the
+   sidebar and the window edge). */
 .workspace-body {
   flex-grow: 1;
   overflow-y: auto;
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--shell-gap) 0;
   display: flex;
   flex-direction: column;
 }
@@ -989,6 +1105,14 @@ body.sidebar-drag-active .sidebar-drop-zone {
   padding-bottom: var(--space-sm);
   margin-bottom: var(--space-sm);
   border-bottom: 1px solid var(--border-subtle);
+}
+
+/* The sort dropdown shares its row with the boost slider — it wraps instead
+   of clipping or colliding, and long option labels ellipsize cleanly. */
+.toolbar-controls-group .sort-select {
+  max-width: 180px;
+  min-width: 0;
+  text-overflow: ellipsis;
 }
 
 .folder-meta-label {
@@ -1470,22 +1594,20 @@ body.sidebar-drag-active .sidebar-drop-zone {
 }
 
 /* --- Bottom Playback Transport Bar (Docked Native Transport) --- */
-/* Full-width transport bar docked at the bottom of the main workspace, right
-   next to the sidebar. It stretches to fill the remaining horizontal space but
-   keeps a small inset on every side (via margins) so it never fuses with the
-   sidebar, the window edges or the bottom of the screen — preserving the
-   rounded, floating look. */
+/* Floating transport card running on the same rails as the toolbar and the
+   content cards, its bottom edge flush with the sidebar card so the whole
+   lower rim sits on one line. */
 #playback-dock {
   flex: 0 0 auto;
   align-self: stretch;
   width: auto;
   max-width: none;
   min-height: 54px;
-  margin: 0 var(--space-lg) 10px;
+  margin: 0;
   justify-content: space-between;
   background-color: var(--bg-dock);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: var(--panel-radius);
   box-shadow: var(--shadow-md, 0 6px 18px rgba(0, 0, 0, 0.28));
   display: flex;
   align-items: center;
@@ -2648,10 +2770,6 @@ body.sidebar-drag-active .sidebar-drop-zone {
 }
 
 @media (max-width: 980px) {
-  .main-header {
-    padding: 4px var(--space-md);
-  }
-
   .header-title-container {
     flex: 1 1 100%;
     min-width: 0;
@@ -2666,15 +2784,9 @@ body.sidebar-drag-active .sidebar-drop-zone {
     display: none;
   }
 
-  .workspace-body {
-    padding: var(--space-sm) var(--space-md);
-  }
-
-  /* Tighten the transport bar insets to match the compact workspace padding,
-     so the dock stays visually aligned with the content sitting above it. */
-  #playback-dock {
-    margin: 0 var(--space-md) 10px;
-  }
+  /* The floating shell keeps an 8px rail on every side, so the compact
+     breakpoints no longer need to re-tune the workspace insets — the cards
+     stay aligned with the toolbar and transport dock at every width. */
 
   .subfolder-tile-name {
     white-space: normal;
@@ -2735,7 +2847,7 @@ body.sidebar-drag-active .sidebar-drop-zone {
     flex-direction: column;
     gap: 6px;
     padding: 8px var(--space-md);
-    margin-bottom: 6px;
+    margin-bottom: 0;
   }
 
   .dock-center-transport {

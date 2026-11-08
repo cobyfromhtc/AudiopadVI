@@ -41,7 +41,11 @@ const icons = {
   chevron: `<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
   folderPlus: `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v1"></path><line x1="18" y1="9" x2="18" y2="15"></line><line x1="15" y1="12" x2="21" y2="12"></line></svg>`,
   pencil: `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`,
-  palette: `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"></circle><circle cx="17.5" cy="10.5" r="1.5"></circle><circle cx="8.5" cy="7.5" r="1.5"></circle><circle cx="6.5" cy="12.5" r="1.5"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg>`
+  palette: `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"></circle><circle cx="17.5" cy="10.5" r="1.5"></circle><circle cx="8.5" cy="7.5" r="1.5"></circle><circle cx="6.5" cy="12.5" r="1.5"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg>`,
+  winMinimize: `<svg viewBox="0 0 10 10" width="10" height="10" shape-rendering="crispEdges"><rect x="1" y="4.5" width="8" height="1" fill="currentColor"></rect></svg>`,
+  winMaximize: `<svg viewBox="0 0 10 10" width="10" height="10" shape-rendering="crispEdges" fill="none"><rect x="1.5" y="1.5" width="7" height="7" stroke="currentColor" stroke-width="1"></rect></svg>`,
+  winRestore: `<svg viewBox="0 0 10 10" width="10" height="10" shape-rendering="crispEdges" fill="none"><rect x="0.5" y="2.5" width="6" height="6" stroke="currentColor" stroke-width="1"></rect><path d="M2.5 2.5 V0.5 H8.5 V6.5 H6.5" stroke="currentColor" stroke-width="1" fill="none"></path></svg>`,
+  winClose: `<svg viewBox="0 0 10 10" width="10" height="10" shape-rendering="crispEdges" stroke="currentColor" stroke-width="1.1"><path d="M1 1 L9 9 M9 1 L1 9"></path></svg>`
 };
 
 // --- Application Reactive State ---
@@ -174,6 +178,12 @@ let state = {
   //* decides which one it controls — 'local' (only you hear the change) or
   //* 'remote' (everybody else hears the change). Persisted in localStorage.
   dockVolumeMode: 'local',
+
+  //* Custom topbar: whether the native window is currently maximized (drives
+  //* the maximize/restore toggle icon). Linux keeps its native titlebar, so the
+  //* window controls and the drag region stay disabled there.
+  isWindowMaximized: false,
+
   toasts: []
 };
 
@@ -211,6 +221,15 @@ async function init() {
       document.body.appendChild(customApp);
     }
 
+    // The host element survives every renderApp() innerHTML swap, so the
+    // shell-level drag handler is bound exactly once here: presses on the
+    // empty canvas gutters around the floating panels keep moving the
+    // frameless window (see handleShellBackgroundPointerDown).
+    if (!customApp.dataset.shellDragBound) {
+      customApp.addEventListener('pointerdown', handleShellBackgroundPointerDown);
+      customApp.dataset.shellDragBound = '1';
+    }
+
     // Sync basic states from backend
     if (window.isLinux) {
       try {
@@ -219,6 +238,13 @@ async function init() {
         console.warn("Failed to query isLinux:", e);
       }
     }
+
+    // Custom topbar: query the initial maximize state and keep it in sync with
+    // window resizes (snap layouts, Win+Up/Down, taskbar toggles).
+    await refreshMaximizedState();
+    window.addEventListener('resize', () => {
+      refreshMaximizedState();
+    });
     if (window.getTabs) {
       try {
         state.tabs = (await window.getTabs()) || [];
@@ -1748,7 +1774,7 @@ function isTargetWindowRunning() {
 async function handleSelectTargetWindow(processName) {
   await updateSetting('targetWindow', processName || null);
   if (processName) {
-    showToast(`Soundboard audio now routes exclusively to "${processName}"`, 'success');
+    showToast(`Sounds now route exclusively into "${processName}" — you keep hearing them locally`, 'success');
   }
 }
 
@@ -3039,7 +3065,8 @@ async function updateDefaultViewMode(mode) {
 // --- Templates Rendering ---
 function renderVBCableRequiredPage() {
   return `
-    <div style="width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg-app); font-family: var(--font-sans); padding: 24px; box-sizing: border-box; overflow-y: auto;">
+    ${renderAppTopbar()}
+    <div style="width: 100%; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; background: var(--bg-app); font-family: var(--font-sans); padding: 24px; box-sizing: border-box; overflow-y: auto;">
       <div style="max-width: 520px; width: 100%; background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); padding: 28px 24px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 18px;">
         
         <!-- Header Icon & Title -->
@@ -3407,6 +3434,113 @@ function renderNewSidebarCategoryModal() {
   `;
 }
 
+// --- Custom Topbar (replaces the native window caption) ---
+// Windows runs the shell frameless; this strip carries the brand, doubles as
+// the drag region and hosts the window controls. On Linux the native titlebar
+// stays, so the controls are hidden and dragging stays disabled.
+function isTopbarInteractive() {
+  return !state.isLinux;
+}
+
+function renderAppTopbar() {
+  const interactive = isTopbarInteractive();
+  return `
+    <div class="app-topbar" id="app-topbar"
+         ${interactive ? `onpointerdown="handleTopbarPointerDown(event)"
+         ondblclick="handleTopbarDoubleClick(event)"` : ''}>
+      <div class="topbar-brand">
+        <span class="sidebar-logo">${icons.logo}</span>
+        <span class="logo-text">AudioPad</span>
+      </div>
+      <div class="topbar-drag-hint" ${interactive ? '' : 'style="display: none;"'}></div>
+      ${interactive ? `
+        <div class="topbar-controls">
+          <button class="topbar-btn" title="Minimize" aria-label="Minimize window"
+                  onclick="handleWindowMinimize()">
+            ${icons.winMinimize}
+          </button>
+          <button class="topbar-btn" title="${state.isWindowMaximized ? 'Restore' : 'Maximize'}"
+                  aria-label="${state.isWindowMaximized ? 'Restore window' : 'Maximize window'}"
+                  onclick="handleWindowMaximize()">
+            ${state.isWindowMaximized ? icons.winRestore : icons.winMaximize}
+          </button>
+          <button class="topbar-btn topbar-close" title="Close" aria-label="Close window"
+                  onclick="handleWindowClose()">
+            ${icons.winClose}
+          </button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+//* Drag-to-move: forwarded to the native shell, which enters the system move
+//* loop (Aero Snap included). Only the left button starts a drag and the window
+//* control buttons are excluded so clicks on them never move the window.
+function handleTopbarPointerDown(event) {
+  if (!isTopbarInteractive()) return;
+  if (event.button !== 0) return;
+  if (event.target.closest('.topbar-btn')) return;
+  if (window.startWindowDrag) {
+    try { window.startWindowDrag(); } catch (e) { /* shell binding missing — ignore */ }
+  }
+}
+
+//* The floating shell leaves a visible app-canvas gutter around every panel.
+//* Presses that land on that empty chrome (the shell host or the layout row
+//* itself, never inside a panel or control) still move the window, so the
+//* frameless window keeps a generous grab area despite the inset topbar.
+function handleShellBackgroundPointerDown(event) {
+  if (!isTopbarInteractive()) return;
+  if (event.button !== 0) return;
+  const target = event.target;
+  if (!(target === event.currentTarget || target.id === 'custom-app' || target.classList.contains('custom-layout'))) return;
+  if (window.startWindowDrag) {
+    try { window.startWindowDrag(); } catch (e) { /* shell binding missing — ignore */ }
+  }
+}
+
+//* Double-click on the topbar toggles maximize, mirroring the native caption.
+function handleTopbarDoubleClick(event) {
+  if (!isTopbarInteractive()) return;
+  if (event.target.closest('.topbar-btn')) return;
+  handleWindowMaximize();
+}
+
+async function refreshMaximizedState() {
+  if (!isTopbarInteractive()) return;
+  if (window.isWindowMaximized) {
+    try {
+      const next = !!(await window.isWindowMaximized());
+      if (next !== state.isWindowMaximized) {
+        state.isWindowMaximized = next;
+        renderApp();
+      }
+    } catch (e) { /* keep previous state */ }
+  }
+}
+
+async function handleWindowMinimize() {
+  if (window.minimizeWindow) {
+    try { await window.minimizeWindow(); } catch (e) { /* ignore */ }
+  }
+}
+
+async function handleWindowMaximize() {
+  if (window.maximizeWindow) {
+    try { await window.maximizeWindow(); } catch (e) { /* ignore */ }
+  }
+  // The toggle is asynchronous — poll shortly after so the icon flips to the
+  // correct restore/maximize glyph.
+  setTimeout(refreshMaximizedState, 60);
+}
+
+async function handleWindowClose() {
+  if (window.closeWindow) {
+    try { await window.closeWindow(); } catch (e) { /* ignore */ }
+  }
+}
+
 function renderApp() {
   const container = document.getElementById('custom-app');
   if (!container) return;
@@ -3495,6 +3629,7 @@ function renderApp() {
   const targetRunning = targetWindow ? isTargetWindowRunning() : false;
 
   container.innerHTML = `
+    ${renderAppTopbar()}
     <div class="custom-layout">
       <!-- Left Compact Category Rail -->
       <aside class="custom-sidebar" style="--sidebar-width: ${state.sidebarWidth}px;">
@@ -3503,13 +3638,7 @@ function renderApp() {
              title="Drag to resize the sidebar — double-click to reset"
              onpointerdown="handleSidebarResizeStart(event)"
              ondblclick="handleSidebarResizeReset()"></div>
-        <div class="sidebar-header">
-          <div class="sidebar-brand">
-            <span class="sidebar-logo">${icons.logo}</span>
-            <span class="logo-text">AudioPad</span>
-          </div>
-        </div>
-        
+
         <div class="folder-list">
           <div class="folder-item ${state.currentView === 'favorites' ? 'active' : ''}" onclick="changeView('favorites')">
             <div class="folder-name-container">
@@ -4333,7 +4462,7 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
                 ${icons.target}
                 <div>
                   <div class="checkbox-title">Route soundboard audio into one application</div>
-                  <div class="checkbox-desc">When a target window is selected (e.g. Roblox), sounds play <strong>only</strong> into that app — other programs such as Discord never receive soundboard audio.</div>
+                  <div class="checkbox-desc">When a target window is selected (e.g. Roblox), sounds are sent exclusively into that app — other programs such as Discord never receive soundboard audio. You always hear the sounds locally too.</div>
                 </div>
               </div>
 
@@ -4367,7 +4496,7 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
 
               ${state.settings.targetWindow ? `
                 <div class="target-window-status ${isTargetWindowRunning() ? 'running' : 'offline'}">
-                  ${isTargetWindowRunning() ? `${icons.target} <span><strong>${escapeHtml(state.settings.targetWindow)}</strong> is running — sounds route exclusively into it.</span>` : `<span>⚠ <strong>${escapeHtml(state.settings.targetWindow)}</strong> is not open right now. Sounds stay exclusive to it and will not leak to other apps — open the app to send audio to it.</span>`}
+                  ${isTargetWindowRunning() ? `${icons.target} <span><strong>${escapeHtml(state.settings.targetWindow)}</strong> is running — sounds route exclusively into it and you hear them locally.</span>` : `<span>⚠ <strong>${escapeHtml(state.settings.targetWindow)}</strong> is not open right now. Sounds stay exclusive to it and will not leak to other apps — open the app to send audio to it.</span>`}
                 </div>
                 ${!state.isLinux ? `
                   <div class="checkbox-desc">Tip: make sure the target app listens on the selected output below (e.g. set Roblox' microphone to the VB-Cable) so it picks up the soundboard.</div>
@@ -5362,10 +5491,18 @@ function renderMultiImageModal() {
 function installPreviewDemoBindings() {
   let demoPlaySeq = 5000;
   const demoPlaying = new Map(); // playId -> { timer, ps }
+  let demoWindowMaximized = false; // simulated window state for the topbar
+
+  // Friendly labels for the virtual-key codes the demo data assigns, mirroring
+  // the sequence strings the native shell sends for real sounds.
+  const demoKeyName = (code) => ({
+    56: 'Num 8', 162: 'Right Ctrl', 165: 'Fwd'
+  }[code] || `Key ${code}`);
 
   const demoSound = (id, name, fav, hotkeys) => ({
     id, name, path: `C:/Soundboards/demo/${name}.mp3`, isFavorite: !!fav,
-    hotkeys: hotkeys || [], modifiedDate: 1700000000 + id, localVolume: null, remoteVolume: null, image: ''
+    hotkeys: hotkeys || [], hotkeySequence: (hotkeys || []).map(demoKeyName).join('+'),
+    modifiedDate: 1700000000 + id, localVolume: null, remoteVolume: null, image: ''
   });
 
   const demoTabs = [
@@ -5452,6 +5589,16 @@ function installPreviewDemoBindings() {
     { title: 'Roblox', processName: 'RobloxPlayerBeta', pid: 8304 },
     { title: 'Skype', processName: 'skype', pid: 6118 }
   ];
+
+  // Window control stubs: the preview has no native shell to drive, so the
+  // topbar buttons become safe no-ops and the window reports as windowed.
+  window.startWindowDrag = async () => {};
+  window.minimizeWindow = async () => {};
+  window.maximizeWindow = async () => {
+    demoWindowMaximized = !demoWindowMaximized;
+  };
+  window.closeWindow = async () => {};
+  window.isWindowMaximized = async () => demoWindowMaximized;
   window.getSystemInfo = async () =>
     'OS: Windows 11 (demo preview)\nCPU: demo\nGPU: demo\nRAM: demo\nAudio: miniaudio (simulated)';
 

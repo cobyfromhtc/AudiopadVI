@@ -24,6 +24,16 @@ namespace Audiopad
         {
             AudioDevice playbackDevice;
 
+            //* Stream role: remote streams feed the configured output devices (what
+            //* everybody else hears, e.g. a VB-Cable), local monitor streams feed the
+            //* user's own listening device. Decouples the role from "plays on the
+            //* system default device" — with a VB-Cable set as Windows default the
+            //* local monitor has to run on an explicit (non-default) device.
+            bool isRemote = false;
+            //* Only one of the paired streams reports progress to the UI, otherwise
+            //* the dock would receive duplicate updates for the same sound.
+            bool reportsProgress = false;
+
             struct
             {
                 std::atomic<ma_device *> device;
@@ -68,7 +78,13 @@ namespace Audiopad
             std::optional<PlayingSound> resume(const std::uint32_t &);
             std::optional<PlayingSound> repeat(const std::uint32_t &, bool);
             std::optional<PlayingSound> seek(const std::uint32_t &, std::uint64_t);
-            std::optional<PlayingSound> play(const Objects::Sound &, const std::optional<AudioDevice> & = std::nullopt);
+            //* \param playbackDevice Explicit render device; nullopt plays on the system default.
+            //* \param isRemoteStream Role of the stream: remote = feeds other listeners
+            //* (remote volume), local = the user's own monitor (local volume).
+            //* \param reportsProgress Whether this stream emits progress/seek updates
+            //* to the UI — exactly one stream of a local/remote pair should report.
+            std::optional<PlayingSound> play(const Objects::Sound &, const std::optional<AudioDevice> & = std::nullopt,
+                                             bool isRemoteStream = false, bool reportsProgress = false);
 
             //* Combined amplification factor (global settings boost * tab boost) for the given sound.
             static float getBoostFactor(const std::uint32_t &soundId);
