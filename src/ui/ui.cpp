@@ -640,6 +640,82 @@ namespace Audiopad::Objects
         return picked;
 #endif
     }
+    std::vector<std::string> Window::pickSoundFilesDialog()
+    {
+#if defined(_WIN32)
+        const char *userProfile = std::getenv("USERPROFILE"); // NOLINT
+        static std::wstring lastPath = userProfile ? Helpers::widen(userProfile) : std::wstring();
+#else
+        const char *homeDirectory = std::getenv("HOME"); // NOLINT
+        static std::string lastPath = homeDirectory ? homeDirectory : "";
+#endif
+
+        std::vector<std::string> picked;
+
+        //* Filter item strings are native (wide on Windows, UTF-8 elsewhere) so the
+        //* dialog only offers supported audio files on both platforms.
+#if defined(_WIN32)
+        const nfdnfilteritem_t filters[1] = {{L"Audio Files", L"mp3,wav,flac"}};
+#else
+        const nfdnfilteritem_t filters[1] = {{"Audio Files", "mp3,wav,flac"}};
+#endif
+
+        const nfdpathset_t *outPaths = {};
+        const auto result =
+            NFD::OpenDialogMultiple(outPaths, filters, 1, lastPath.empty() ? nullptr : lastPath.c_str());
+
+        if (result == NFD_OKAY && outPaths != nullptr)
+        {
+            nfdpathsetsize_t count = 0;
+            if (NFD::PathSet::Count(outPaths, count) == NFD_OKAY)
+            {
+                picked.reserve(count);
+                for (nfdpathsetsize_t index = 0; index < count; index++)
+                {
+                    nfdnchar_t *path = {};
+                    if (NFD::PathSet::GetPath(outPaths, index, path) == NFD_OKAY && path != nullptr)
+                    {
+#if defined(_WIN32)
+                        std::wstring wide(path);
+                        NFD::PathSet::FreePath(path);
+
+                        //* Keep the model on forward slashes (like pickFolderDialog)
+                        //* and remember the parent directory for the next pick.
+                        std::transform(wide.begin(), wide.end(), wide.begin(),
+                                       [](wchar_t c) { return c == L'\\' ? L'/' : c; });
+
+                        if (picked.empty())
+                        {
+                            std::wstring parent = std::filesystem::path(wide).parent_path().wstring();
+                            std::transform(parent.begin(), parent.end(), parent.begin(),
+                                           [](wchar_t c) { return c == L'/' ? L'\\' : c; });
+                            if (!parent.empty())
+                            {
+                                lastPath = parent;
+                            }
+                        }
+
+                        picked.push_back(Helpers::narrow(wide));
+#else
+                        std::string entry(path);
+                        NFD::PathSet::FreePath(path);
+
+                        if (picked.empty())
+                        {
+                            lastPath = std::filesystem::path(entry).parent_path();
+                        }
+
+                        picked.push_back(entry);
+#endif
+                    }
+                }
+            }
+
+            NFD::PathSet::Free(outPaths);
+        }
+
+        return picked;
+    }
     std::optional<Tab> Window::importFolderIntoTab(const std::uint32_t &tabId, const std::string &sourcePath,
                                                    const std::string &mode)
     {

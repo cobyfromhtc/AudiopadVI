@@ -102,6 +102,11 @@ namespace Audiopad
             //* picked.
             virtual std::vector<std::string> pickFoldersDialog();
 
+            //* Opens the native multi-select file picker filtered to supported audio
+            //* formats (mp3 / wav / flac). Returns every chosen file path; empty when
+            //* the dialog was cancelled or nothing was picked.
+            virtual std::vector<std::string> pickSoundFilesDialog();
+
             //* Imports items dragged in from the OS file manager into the given tab —
             //* at the tab root, or inside `parentFolderId` when given. Every dropped
             //* directory is copied recursively (structure preserved) into a folder of

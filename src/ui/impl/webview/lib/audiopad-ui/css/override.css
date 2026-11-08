@@ -1915,7 +1915,7 @@ body.sidebar-drag-active .sidebar-drop-zone {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   /* The transport block now stretches so the timeline can use the full
      width available between the track info and the right meta cluster. */
   flex: 1 1 auto;
@@ -1927,21 +1927,21 @@ body.sidebar-drag-active .sidebar-drop-zone {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
 }
 
-/* Dock transport buttons are deliberately larger than the compact 22px
-   action buttons used inside the sound cards — this is the primary
-   transport cluster of the whole application. */
+/* Dock transport buttons sit on TOP of the timeline and are deliberately
+   compact — the timeline below is the primary readout, the buttons above it
+   are quick actions. */
 .dock-transport-controls .action-btn {
-  width: 32px;
-  height: 32px;
+  width: 27px;
+  height: 27px;
   border-radius: var(--radius-sm);
 }
 
 .dock-transport-controls .action-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
 }
 
 .dock-transport-controls .action-btn:disabled {
@@ -1950,8 +1950,8 @@ body.sidebar-drag-active .sidebar-drop-zone {
 
 /* Play / Pause is the hero control: a circular accent-tinted button. */
 #dock-btn-playpause {
-  width: 42px;
-  height: 42px;
+  width: 35px;
+  height: 35px;
   border-radius: 50%;
   background: var(--color-accent-subtle);
   border-color: var(--color-accent-subtle);
@@ -1959,8 +1959,8 @@ body.sidebar-drag-active .sidebar-drop-zone {
 }
 
 #dock-btn-playpause svg {
-  width: 17px;
-  height: 17px;
+  width: 14px;
+  height: 14px;
 }
 
 #dock-btn-playpause:not(:disabled):hover {
@@ -3230,6 +3230,207 @@ body.sidebar-drag-active .sidebar-drop-zone {
   height: 1px;
   background-color: var(--border-subtle);
   margin: 3px 0;
+}
+
+/* --- First-Run Onboarding Tour (one-time spotlight guide) ---
+   The overlay lives directly on <body>, above every app layer. The spotlight
+   "hole" is a positioned element whose huge box-shadow dims the rest of the
+   screen; the guide card floats next to the highlighted target. */
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  pointer-events: auto;
+}
+
+.onboarding-overlay.no-spotlight {
+  background: rgba(5, 8, 14, 0.76);
+}
+
+.light-theme .onboarding-overlay.no-spotlight {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.onboarding-spotlight {
+  position: absolute;
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--color-accent);
+  box-shadow: 0 0 0 9999px rgba(5, 8, 14, 0.76);
+  transition: top 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.light-theme .onboarding-spotlight {
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.55);
+}
+
+.onboarding-card {
+  position: absolute;
+  width: min(380px, calc(100vw - 32px));
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 2;
+  transition: top 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.onboarding-card-inner {
+  padding: 16px 18px 13px;
+  animation: onboarding-step-in 0.24s ease;
+}
+
+@keyframes onboarding-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.onboarding-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.onboarding-icon-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.onboarding-icon-chip svg {
+  width: 18px;
+  height: 18px;
+}
+
+.onboarding-step-count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--color-muted);
+  letter-spacing: 0.04em;
+}
+
+.onboarding-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.onboarding-text {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--color-secondary);
+}
+
+.onboarding-progress {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 13px;
+}
+
+.onboarding-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-strong);
+  transition: background var(--transition-base), width var(--transition-base);
+}
+
+.onboarding-dot.done {
+  background: var(--color-accent-subtle);
+}
+
+.onboarding-dot.active {
+  width: 18px;
+  background: var(--color-accent);
+}
+
+.onboarding-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.onboarding-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.onboarding-btn {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  padding: 7px 14px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.onboarding-btn.primary {
+  background: var(--color-accent);
+  color: #ffffff;
+  border-color: var(--color-accent);
+}
+
+.onboarding-btn.primary:hover {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+
+.onboarding-btn.ghost {
+  background: transparent;
+  color: var(--color-secondary);
+  border-color: var(--border-color);
+}
+
+.onboarding-btn.ghost:hover {
+  color: var(--color-primary);
+  border-color: var(--border-strong);
+  background: var(--bg-surface-hover);
+}
+
+.onboarding-kbd-hint {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 10px;
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.onboarding-kbd-hint kbd {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: var(--color-secondary);
 }
 
 /* --- Modals & Overlays --- */

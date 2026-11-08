@@ -269,6 +269,13 @@ namespace Audiopad::Objects
             auto picked = pickFolderDialog();
             return picked ? *picked : "";
         }));
+        //* Multi-select audio file picker for "Import Sound" (folder context menu).
+        //* Returns every chosen file path; an empty array means the dialog was
+        //* cancelled. Uses NFD on both platforms (IFileOpenDialog on Windows,
+        //* GTK file chooser on Linux).
+        webview->expose(Webview::Function("pickImportFiles", [this]() -> std::vector<std::string> {
+            return pickSoundFilesDialog();
+        }));
         webview->expose(
             Webview::AsyncFunction("importFolder", [this](const Webview::Promise &promise, std::uint32_t tabId,
                                                           const std::string &sourcePath, const std::string &mode) {

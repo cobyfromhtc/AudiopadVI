@@ -189,6 +189,16 @@ let state = {
   //* window controls and the drag region stay disabled there.
   isWindowMaximized: false,
 
+  //* First-run onboarding tour. `pending` is set once per machine (nothing
+  //* stored in localStorage yet) and the tour activates as soon as the real
+  //* workspace renders. Finishing OR skipping persists the outcome, so the
+  //* tour never appears again afterwards.
+  onboarding: {
+    pending: false,
+    active: false,
+    step: 0
+  },
+
   toasts: []
 };
 
@@ -250,6 +260,13 @@ async function init() {
     window.addEventListener('resize', () => {
       refreshMaximizedState();
     });
+    // Keep the onboarding spotlight glued to its highlighted element across
+    // window resizes (the tour overlay lives outside renderApp's re-renders).
+    window.addEventListener('resize', () => {
+      if (state.onboarding.active) {
+        positionOnboarding();
+      }
+    });
     if (window.getTabs) {
       try {
         state.tabs = (await window.getTabs()) || [];
@@ -267,6 +284,9 @@ async function init() {
     loadSidebarWidth();
     // Restore the dock volume mode toggle (Local / Remote)
     loadDockVolumeMode();
+    // First-run check: the onboarding tour only stays pending when no outcome
+    // (completed / skipped) has been stored on this machine yet.
+    loadOnboardingState();
 
     if (window.getSettings) {
       try {
@@ -1681,13 +1701,16 @@ async function handleCreateNewFolder() {
 }
 
 // --- Import Folder (recursive, structure-preserving) ---
-async function handleImportFolder() {
+//* Import Folder: opens the native folder picker and (after the keep/flatten
+//* confirmation) copies the picked folder's audio into the given category —
+//* or the active one when no tabId is passed (classic toolbar button).
+async function handleImportFolder(tabId) {
   if (state.isImportingFolder) return;
   if (!window.pickImportFolder || !window.importFolder) {
     showToast("Folder import is not supported by this backend", "error");
     return;
   }
-  const tab = state.tabs.find(t => t.id === state.activeTabId);
+  const tab = state.tabs.find(t => t.id === (tabId !== undefined && tabId !== null ? tabId : state.activeTabId));
   if (!tab) {
     showToast("Select a category first", "info");
     return;
@@ -1706,6 +1729,48 @@ async function handleImportFolder() {
     parentFolderId: 0,
     isDrop: false
   };
+  renderApp();
+}
+
+//* Import Sound: opens the native multi-select audio file picker and copies
+//* the chosen files straight into the given category's root. Reuses the
+//* battle-tested importDroppedPaths copy pipeline (same path as OS drag & drop).
+async function handleImportSounds(tabId) {
+  if (state.isImportingFolder) return;
+  if (!window.pickImportFiles || !window.importDroppedPaths) {
+    showToast("Sound import is not supported by this backend", "error");
+    return;
+  }
+  const tab = state.tabs.find(t => t.id === tabId);
+  if (!tab) {
+    showToast("Select a category first", "info");
+    return;
+  }
+
+  const files = await window.pickImportFiles();
+  if (!Array.isArray(files) || files.length === 0) return; // dialog cancelled
+
+  state.isImportingFolder = true;
+  renderApp();
+
+  try {
+    const soundsBefore = countTabSounds(tab);
+    const updatedTab = await window.importDroppedPaths(tab.id, 0, files, 'children');
+    if (updatedTab && updatedTab.id !== undefined) {
+      state.tabs = state.tabs.map(t => t.id === updatedTab.id ? updatedTab : t);
+      const added = countTabSounds(updatedTab) - soundsBefore;
+      if (added > 0) {
+        showToast(`Imported ${added} sound${added === 1 ? '' : 's'} into "${tab.name}"`, 'success');
+      } else {
+        showToast('No new sounds found — everything already existed', 'info');
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to import sounds:', e);
+    showToast('Failed to import sounds', 'error');
+  }
+
+  state.isImportingFolder = false;
   renderApp();
 }
 
@@ -2171,7 +2236,38 @@ function handleSoundContextMenu(soundId, event) {
     visible: true,
     x,
     y,
+    type: 'sound',
     soundId
+  };
+  renderApp();
+}
+
+//* Right-click on a soundboard folder (sidebar category row): opens the folder
+//* context menu — Open in Explorer, Import Sound, Import Folder, Edit, Delete.
+function handleFolderContextMenu(tabId, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  const tab = state.tabs.find(t => t.id === tabId);
+  if (!tab) return;
+
+  const mouseX = event ? event.clientX : window.innerWidth / 2;
+  const mouseY = event ? event.clientY : window.innerHeight / 2;
+
+  const menuWidth = 230;
+  const menuHeight = 275;
+
+  const x = (mouseX + menuWidth > window.innerWidth) ? Math.max(10, window.innerWidth - menuWidth - 10) : mouseX;
+  const y = (mouseY + menuHeight > window.innerHeight) ? Math.max(10, window.innerHeight - menuHeight - 10) : mouseY;
+
+  state.contextMenu = {
+    visible: true,
+    x,
+    y,
+    type: 'folder',
+    tabId
   };
   renderApp();
 }
@@ -2938,6 +3034,29 @@ function handleOpenUrl(url) {
 
 // --- Keyboard listener for Hotkey recorders & Desktop Shortcuts ---
 function handleGlobalKeydown(e) {
+  // The onboarding tour owns the keyboard while it is active: Esc skips the
+  // tour, arrows navigate. Nothing else (panic stop, search, ...) fires.
+  if (state.onboarding.active) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      skipOnboarding();
+    } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (state.onboarding.step >= ONBOARDING_STEPS.length - 1) {
+        finishOnboarding();
+      } else {
+        advanceOnboarding(1);
+      }
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      e.stopPropagation();
+      advanceOnboarding(-1);
+    }
+    return;
+  }
+
   if (state.recordingHotkeySoundId === null && state.recordingTarget === null) {
     if (e.key === 'Escape') {
       if (state.contextMenu && state.contextMenu.visible) {
@@ -3203,6 +3322,7 @@ function renderSidebarTabItem(t) {
          data-tab-id="${t.id}"
          draggable="true"
          onclick="changeView('folder', ${t.id})"
+         oncontextmenu="handleFolderContextMenu(${t.id}, event)"
          ondragstart="handleSidebarDragStart(${t.id}, event)"
          ondragend="handleSidebarDragEnd()"
          ondragover="handleSidebarTabDragOver(${t.id}, event)"
@@ -3816,6 +3936,10 @@ function renderApp() {
       }
     }
   }
+
+  // First-run onboarding: starts the tour overlay once the real workspace is
+  // on screen (this line is unreachable for the VB-Cable setup page).
+  maybeStartOnboarding();
 } catch (err) {
     console.error("Critical error in renderApp:", err);
     container.innerHTML = `
@@ -5509,37 +5633,37 @@ function renderPlaybackDock() {
       </div>
       
       <div class="dock-center-transport">
+        <div class="dock-transport-controls">
+          <button id="dock-btn-repeat" class="action-btn ${details && details.repeat ? 'active' : ''}"
+                  style="color: ${details && details.repeat ? 'var(--color-accent)' : 'inherit'};"
+                  title="Repeat Track"
+                  ${!isPlaying ? 'disabled' : ''}
+                  onclick="event.stopPropagation(); handleToggleRepeat()">
+            ${icons.repeat}
+          </button>
+          <button id="dock-btn-playpause" class="action-btn ${isPlaying && !isPaused ? 'play-btn' : ''}"
+                  title="${isPlaying ? (isPaused ? 'Resume Playback' : 'Pause Playback') : 'Play'}"
+                  ${!isPlaying ? 'disabled' : ''}
+                  onclick="event.stopPropagation(); handleTogglePlayPause()">
+            ${isPlaying && !isPaused ? icons.pause : icons.play}
+          </button>
+          <button id="dock-btn-stop" class="action-btn stop-btn"
+                  title="${multiMode ? 'Stop the controlled sound (Esc stops all)' : 'Stop Playback'}"
+                  ${!isPlaying ? 'disabled' : ''}
+                  onclick="event.stopPropagation(); handleStopActiveSound()">
+            ${icons.stop}
+          </button>
+        </div>
+
         <div class="dock-scrub-row">
           <span id="playback-dock-current" class="dock-time-text">${formatMs(current)}</span>
-          <div id="playback-dock-bar" class="progress-bar-wrapper" 
-               style="cursor: ${isPlaying ? 'pointer' : 'default'};" 
+          <div id="playback-dock-bar" class="progress-bar-wrapper"
+               style="cursor: ${isPlaying ? 'pointer' : 'default'};"
                onpointerdown="${isPlaying ? 'handleScrubberPointerDown(event)' : ''}">
             <div id="playback-dock-fill" class="progress-bar-fill" style="width: ${percentage}%"></div>
             <div id="playback-dock-thumb" class="progress-bar-thumb" style="left: ${percentage}%; display: ${isPlaying ? 'block' : 'none'};"></div>
           </div>
           <span id="playback-dock-length" class="dock-time-text">${formatMs(length)}</span>
-        </div>
-
-        <div class="dock-transport-controls">
-          <button id="dock-btn-repeat" class="action-btn ${details && details.repeat ? 'active' : ''}" 
-                  style="color: ${details && details.repeat ? 'var(--color-accent)' : 'inherit'};" 
-                  title="Repeat Track" 
-                  ${!isPlaying ? 'disabled' : ''}
-                  onclick="event.stopPropagation(); handleToggleRepeat()">
-            ${icons.repeat}
-          </button>
-          <button id="dock-btn-playpause" class="action-btn ${isPlaying && !isPaused ? 'play-btn' : ''}" 
-                  title="${isPlaying ? (isPaused ? 'Resume Playback' : 'Pause Playback') : 'Play'}" 
-                  ${!isPlaying ? 'disabled' : ''}
-                  onclick="event.stopPropagation(); handleTogglePlayPause()">
-            ${isPlaying && !isPaused ? icons.pause : icons.play}
-          </button>
-          <button id="dock-btn-stop" class="action-btn stop-btn" 
-                  title="${multiMode ? 'Stop the controlled sound (Esc stops all)' : 'Stop Playback'}" 
-                  ${!isPlaying ? 'disabled' : ''}
-                  onclick="event.stopPropagation(); handleStopActiveSound()">
-            ${icons.stop}
-          </button>
         </div>
       </div>
       
@@ -5568,6 +5692,292 @@ function renderPlaybackDock() {
       </div>
     </footer>
   `;
+}
+
+// --- First-Run Onboarding Tour ---------------------------------------------
+// A one-time interactive spotlight tour guiding new users through the
+// interface. The tour overlay lives directly on <body> (outside renderApp's
+// innerHTML re-renders) so the spotlight and card animate smoothly while the
+// app keeps re-rendering underneath. The outcome — 'completed' or 'skipped' —
+// is persisted in localStorage: once the tour has been finished OR skipped it
+// never appears again on that machine.
+const ONBOARDING_STORAGE_KEY = 'audiopad_onboarding_tour';
+
+const ONBOARDING_STEPS = [
+  {
+    icon: icons.logo,
+    title: 'Welcome to Audiopad',
+    text: 'A quick, interactive tour of your soundboard — where categories live, how to import sounds, and how playback works. It only shows this one time.',
+    cta: 'Start Tour'
+  },
+  {
+    target: '.custom-sidebar',
+    icon: icons.folder,
+    title: 'Categories & Folders',
+    text: 'Every soundboard folder is a category in the left rail. Click one to browse its sounds, drag rows to reorder them, and double-click a section header to rename the section.'
+  },
+  {
+    target: '.custom-sidebar',
+    icon: icons.wrench,
+    title: 'Right-click for quick actions',
+    text: 'Right-click any folder to open it in your file explorer, import single sounds or whole folders, edit its name, or delete it — all in one place.'
+  },
+  {
+    target: '.sidebar-add-buttons',
+    icon: icons.plus,
+    title: 'Build your library',
+    text: 'Create brand-new empty folders, add existing folders from your disk as categories, or group folders into custom sections.'
+  },
+  {
+    target: '.header-actions',
+    icon: icons.search,
+    title: 'Find & switch views',
+    text: 'Search across the whole category (Ctrl+F) and switch between Stream Deck pads, the high-density table, or the media grid — whatever fits your style.'
+  },
+  {
+    target: '.workspace-body',
+    icon: icons.music,
+    title: 'Play, hotkey, favorite',
+    text: 'Click a sound to play it instantly. Hover a row for per-sound volume, right-click it for images, favorites and hotkeys — global hotkeys fire even when Audiopad is in the background.'
+  },
+  {
+    target: '#playback-dock',
+    icon: icons.repeat,
+    title: 'The transport dock',
+    text: 'Playback controls sit above the timeline: loop, pause or stop the active sound, and scrub the timeline below to jump anywhere in the track.'
+  },
+  {
+    target: '.dock-volume',
+    icon: icons.headphones,
+    title: 'Local vs Remote volume',
+    text: 'One slider, two audiences. Local changes what you hear; Remote changes what everybody else hears through your mic. Click the toggle to switch between them.'
+  },
+  {
+    target: '.panic-stop-btn',
+    icon: icons.bolt,
+    title: 'The panic button',
+    text: 'Everything playing at once? Hit this button — or press ESC anywhere — to instantly stop all playback.'
+  },
+  {
+    icon: icons.rocket,
+    title: "You're all set!",
+    text: 'That was the whole tour. Check Settings & Audio for output devices, themes and push-to-talk — and enjoy the noise.',
+    cta: 'Finish'
+  }
+];
+
+let onboardingResizeObserver = null;
+
+//* Reads the persisted tour outcome. `pending` stays true only when nothing
+//* has been stored yet (true first launch).
+function loadOnboardingState() {
+  let outcome = null;
+  try {
+    const raw = localStorage.getItem(ONBOARDING_STORAGE_KEY);
+    outcome = (raw === 'completed' || raw === 'skipped') ? raw : null;
+  } catch (e) {
+    outcome = null; // localStorage unavailable — show the tour, best effort
+  }
+  state.onboarding.pending = outcome === null;
+}
+
+function persistOnboardingOutcome(outcome) {
+  try {
+    localStorage.setItem(ONBOARDING_STORAGE_KEY, outcome);
+  } catch (e) {
+    console.warn('Failed to persist onboarding outcome:', e);
+  }
+}
+
+//* Called at the end of every renderApp pass: once the real workspace is on
+//* screen (not the VB-Cable setup page) and no outcome has been recorded, the
+//* tour overlay is created exactly once.
+function maybeStartOnboarding() {
+  if (!state.onboarding.pending || state.onboarding.active) return;
+  if (!document.querySelector('.custom-layout')) return;
+
+  state.onboarding.pending = false;
+  state.onboarding.active = true;
+  state.onboarding.step = 0;
+
+  buildOnboardingOverlay();
+
+  //* Layout shifts underneath (e.g. sidebar resizing) must keep the spotlight
+  //* glued to its target — observe the app root while the tour is running.
+  if (typeof ResizeObserver !== 'undefined') {
+    onboardingResizeObserver = new ResizeObserver(() => positionOnboarding());
+    const appRoot = document.getElementById('custom-app');
+    if (appRoot) onboardingResizeObserver.observe(appRoot);
+  }
+}
+
+function buildOnboardingOverlay() {
+  destroyOnboardingOverlay();
+  const overlay = document.createElement('div');
+  overlay.id = 'onboarding-overlay';
+  overlay.className = 'onboarding-overlay';
+  // Spotlight + card shell are created once and survive step changes, so the
+  // spotlight glide transition animates between steps.
+  overlay.innerHTML = `
+    <div class="onboarding-spotlight" id="onboarding-spotlight"></div>
+    <div class="onboarding-card" id="onboarding-card" role="dialog" aria-modal="true"></div>
+  `;
+  document.body.appendChild(overlay);
+  updateOnboardingOverlay();
+}
+
+function destroyOnboardingOverlay() {
+  const existing = document.getElementById('onboarding-overlay');
+  if (existing) existing.remove();
+}
+
+function onboardingStepDef() {
+  return ONBOARDING_STEPS[state.onboarding.step] || ONBOARDING_STEPS[0];
+}
+
+//* Rebuilds the tour card content for the current step and repositions the
+//* spotlight around the step's target element.
+function updateOnboardingOverlay() {
+  if (!state.onboarding.active) return;
+  const card = document.getElementById('onboarding-card');
+  if (!card) return;
+
+  const stepIndex = state.onboarding.step;
+  const def = onboardingStepDef();
+  const isLast = stepIndex >= ONBOARDING_STEPS.length - 1;
+  const nextLabel = def.cta || (isLast ? 'Finish' : 'Next');
+
+  card.setAttribute('aria-label', def.title);
+  card.innerHTML = `
+    <div class="onboarding-card-inner">
+      <div class="onboarding-card-top">
+        <span class="onboarding-icon-chip" aria-hidden="true">${def.icon}</span>
+        <span class="onboarding-step-count">${stepIndex + 1} / ${ONBOARDING_STEPS.length}</span>
+      </div>
+      <h3 class="onboarding-title">${def.title}</h3>
+      <p class="onboarding-text">${def.text}</p>
+      <div class="onboarding-progress" aria-hidden="true">
+        ${ONBOARDING_STEPS.map((s, i) => `<span class="onboarding-dot ${i === stepIndex ? 'active' : (i < stepIndex ? 'done' : '')}"></span>`).join('')}
+      </div>
+      <div class="onboarding-actions">
+        <button type="button" class="onboarding-btn ghost" onclick="skipOnboarding()">Skip tour</button>
+        <div class="onboarding-actions-right">
+          ${stepIndex > 0 ? `<button type="button" class="onboarding-btn ghost" onclick="advanceOnboarding(-1)">Back</button>` : ''}
+          <button type="button" class="onboarding-btn primary" onclick="${isLast ? 'finishOnboarding()' : 'advanceOnboarding(1)'}">${nextLabel}</button>
+        </div>
+      </div>
+      <div class="onboarding-kbd-hint"><kbd>←</kbd> back&nbsp;&nbsp;<kbd>→</kbd> next&nbsp;&nbsp;<kbd>Esc</kbd> skip</div>
+    </div>
+  `;
+
+  positionOnboarding();
+}
+
+//* Measures the step's target and positions the spotlight hole plus the guide
+//* card around it. Steps without a reachable target (welcome / finish, or a
+//* hidden control) fall back to a centered card over a fully dimmed backdrop.
+function positionOnboarding() {
+  if (!state.onboarding.active) return;
+  const overlay = document.getElementById('onboarding-overlay');
+  const spotlight = document.getElementById('onboarding-spotlight');
+  const card = document.getElementById('onboarding-card');
+  if (!overlay || !spotlight || !card) return;
+
+  const def = onboardingStepDef();
+  const target = def.target ? document.querySelector(def.target) : null;
+
+  if (target) {
+    overlay.classList.add('has-spotlight');
+    overlay.classList.remove('no-spotlight');
+    const rect = target.getBoundingClientRect();
+    const pad = 8;
+    spotlight.style.display = 'block';
+    spotlight.style.top = `${Math.round(rect.top - pad)}px`;
+    spotlight.style.left = `${Math.round(rect.left - pad)}px`;
+    spotlight.style.width = `${Math.round(rect.width + pad * 2)}px`;
+    spotlight.style.height = `${Math.round(rect.height + pad * 2)}px`;
+    positionOnboardingCard(card, rect);
+  } else {
+    overlay.classList.add('no-spotlight');
+    overlay.classList.remove('has-spotlight');
+    spotlight.style.display = 'none';
+    card.style.left = '50%';
+    card.style.top = '50%';
+    card.style.transform = 'translate(-50%, -50%)';
+  }
+}
+
+//* Places the card below the spotlight target when there is room, above it
+//* otherwise — and when the target spans the full height (e.g. the sidebar),
+//* beside it instead, so the highlighted element is never covered.
+function positionOnboardingCard(card, targetRect) {
+  card.style.transform = 'none';
+  const cardWidth = card.offsetWidth || 380;
+  const cardHeight = card.offsetHeight || 260;
+  const margin = 14;
+
+  let left = targetRect.left + targetRect.width / 2 - cardWidth / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - cardWidth - margin));
+
+  let top;
+  const spaceBelow = window.innerHeight - targetRect.bottom;
+  if (spaceBelow >= cardHeight + margin) {
+    top = targetRect.bottom + margin;
+  } else if (targetRect.top >= cardHeight + margin) {
+    top = targetRect.top - cardHeight - margin;
+  } else {
+    //* Full-height target: dock the card to its side (right preferred) so the
+    //* spotlight stays fully visible, vertically centered on the target.
+    const spaceRight = window.innerWidth - targetRect.right;
+    if (spaceRight >= cardWidth + margin) {
+      left = targetRect.right + margin;
+    } else if (targetRect.left >= cardWidth + margin) {
+      left = targetRect.left - cardWidth - margin;
+    }
+    top = Math.max(margin, Math.min(
+      targetRect.top + targetRect.height / 2 - cardHeight / 2,
+      window.innerHeight - cardHeight - margin));
+  }
+
+  card.style.left = `${Math.round(left)}px`;
+  card.style.top = `${Math.round(top)}px`;
+}
+
+//* Next / Back navigation. Steps whose target is not currently rendered are
+//* skipped in the travel direction; the first and last steps never have a
+//* target, so the loop always terminates on them.
+function advanceOnboarding(direction) {
+  if (!state.onboarding.active) return;
+  const dir = direction >= 0 ? 1 : -1;
+
+  let step = state.onboarding.step + dir;
+  while (step > 0 && step < ONBOARDING_STEPS.length - 1) {
+    const def = ONBOARDING_STEPS[step];
+    if (!def.target || document.querySelector(def.target)) break;
+    step += dir;
+  }
+
+  state.onboarding.step = Math.max(0, Math.min(step, ONBOARDING_STEPS.length - 1));
+  updateOnboardingOverlay();
+}
+
+function finishOnboarding() {
+  persistOnboardingOutcome('completed');
+  endOnboarding();
+}
+
+function skipOnboarding() {
+  persistOnboardingOutcome('skipped');
+  endOnboarding();
+}
+
+function endOnboarding() {
+  state.onboarding.active = false;
+  if (onboardingResizeObserver) {
+    onboardingResizeObserver.disconnect();
+    onboardingResizeObserver = null;
+  }
+  destroyOnboardingOverlay();
 }
 
 // Render recording dialog popup modals
@@ -5609,7 +6019,51 @@ function renderModalOverlays() {
 function renderContextMenu() {
   if (!state.contextMenu || !state.contextMenu.visible) return '';
 
-  const { x, y, soundId } = state.contextMenu;
+  const { x, y } = state.contextMenu;
+
+  //* Folder (sidebar category row) context menu — quick folder actions.
+  if (state.contextMenu.type === 'folder') {
+    const tabId = state.contextMenu.tabId;
+    const tab = state.tabs.find(t => t.id === tabId);
+    if (!tab) return '';
+
+    return `
+    <div class="custom-context-menu" style="left: ${x}px; top: ${y}px;" onclick="event.stopPropagation()">
+      <div style="padding: 4px 8px 6px 8px; font-size: 11px; font-weight: 700; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-color); margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        ${escapeHtml(tab.name)}
+      </div>
+
+      <button class="context-menu-item" onclick="closeContextMenu(); handleOpenFolder(${tabId})">
+        <span class="context-menu-icon">${icons.openLink}</span>
+        <span>Open in explorer</span>
+      </button>
+
+      <button class="context-menu-item" onclick="closeContextMenu(); handleImportSounds(${tabId})" ${state.isImportingFolder ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+        <span class="context-menu-icon">${icons.music}</span>
+        <span>Import Sound</span>
+      </button>
+
+      <button class="context-menu-item" onclick="closeContextMenu(); handleImportFolder(${tabId})" ${state.isImportingFolder ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+        <span class="context-menu-icon">${icons.folderPlus}</span>
+        <span>Import Folder</span>
+      </button>
+
+      <div class="context-menu-divider"></div>
+
+      <button class="context-menu-item" onclick="closeContextMenu(); handleOpenRenameTabModal(${tabId})">
+        <span class="context-menu-icon">${icons.pencil}</span>
+        <span>Edit</span>
+      </button>
+
+      <button class="context-menu-item danger" onclick="closeContextMenu(); handleDeleteTab(${tabId})">
+        <span class="context-menu-icon">${icons.trash}</span>
+        <span>Delete</span>
+      </button>
+    </div>
+  `;
+  }
+
+  const soundId = state.contextMenu.soundId;
   const targetSound = findSoundInTabs(soundId);
   if (!targetSound) return '';
 
@@ -5934,6 +6388,91 @@ function installPreviewDemoBindings() {
   window.seekSound = async (playId, positionMs) => {
     const e = demoPlaying.get(playId);
     if (e) { e.ps.readInMs = Math.max(0, Math.min(positionMs, e.ps.lengthInMs)); deliver('updateSound', e.ps); }
+  };
+
+  // Import & folder stubs (folder context menu + toolbar buttons): simulate the
+  // native pickers and the on-disk copy pipeline so the whole import flow is
+  // clickable in the preview. Cancelled pickers would return '' / [] exactly
+  // like the native shell — here they always "pick" demo content.
+  let demoImportSeq = 9000;
+  let demoFolderSeq = 20000;
+
+  const findDemoTab = (tabId) => demoTabs.find(t => t.id === tabId) || null;
+
+  const cloneDemoTab = (tab) => JSON.parse(JSON.stringify(tab));
+
+  window.openFolder = async (tabId) => {
+    const tab = findDemoTab(tabId);
+    if (tab) showToast(`(demo) Opening "${tab.path}" in the file manager`, 'info');
+  };
+
+  window.pickImportFiles = async () => [
+    'C:/Users/demo/Downloads/vine-boom.wav',
+    'C:/Users/demo/Downloads/bruh-sound-effect-2.mp3'
+  ];
+
+  window.pickImportFolder = async () => 'C:/Users/demo/Downloads/Meme Pack';
+
+  window.importDroppedPaths = async (tabId, parentFolderId, paths) => {
+    const tab = findDemoTab(tabId);
+    if (!tab) return null;
+
+    const newSounds = [];
+    const newFolders = [];
+    (paths || []).forEach(p => {
+      if (/\.(mp3|wav|flac)$/i.test(p)) {
+        newSounds.push(demoSound(demoImportSeq++, folderBaseName(p).replace(/\.[^.]+$/, ''), false, []));
+      } else {
+        const name = folderBaseName(p) || 'Imported Folder';
+        newFolders.push({
+          id: demoFolderSeq++,
+          name,
+          path: `C:/Soundboards/${tab.name}/${name}`,
+          sounds: [
+            demoSound(demoImportSeq++, `${name}-clip-1`, false, []),
+            demoSound(demoImportSeq++, `${name}-clip-2`, false, [])
+          ],
+          folders: []
+        });
+      }
+    });
+
+    if (parentFolderId && parentFolderId !== 0) {
+      const target = findFolderInTree(tab.folders, parentFolderId);
+      if (target) {
+        target.sounds = [...(target.sounds || []), ...newSounds];
+        target.folders = [...(target.folders || []), ...newFolders];
+      }
+    } else {
+      tab.sounds = [...(tab.sounds || []), ...newSounds];
+      tab.folders = [...(tab.folders || []), ...newFolders];
+    }
+    return cloneDemoTab(tab);
+  };
+
+  window.importFolder = async (tabId, sourcePath, mode) => {
+    const tab = findDemoTab(tabId);
+    if (!tab) return null;
+
+    const name = folderBaseName(sourcePath) || 'Imported Folder';
+    const children = [
+      demoSound(demoImportSeq++, 'clip-01', false, []),
+      demoSound(demoImportSeq++, 'clip-02', false, []),
+      demoSound(demoImportSeq++, 'clip-03', false, [])
+    ];
+
+    if (mode === 'parent') {
+      tab.folders = [...(tab.folders || []), {
+        id: demoFolderSeq++,
+        name,
+        path: `C:/Soundboards/${tab.name}/${name}`,
+        sounds: children,
+        folders: []
+      }];
+    } else {
+      tab.sounds = [...(tab.sounds || []), ...children];
+    }
+    return cloneDemoTab(tab);
   };
 }
 
