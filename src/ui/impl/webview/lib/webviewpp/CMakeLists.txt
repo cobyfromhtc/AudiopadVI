@@ -40,7 +40,13 @@ elseif(UNIX)
 
     find_package(PkgConfig REQUIRED)
         pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
-        pkg_check_modules(WEBKIT2 REQUIRED webkit2gtk-4.0)
+        # webkit2gtk-4.0 has been dropped from current releases (Debian 13+,
+        # Ubuntu 24.04+) in favour of the API-compatible 4.1 (libsoup3); probe
+        # the modern one first and keep 4.0 for older distributions.
+        pkg_check_modules(WEBKIT2 webkit2gtk-4.1)
+        if (NOT WEBKIT2_FOUND)
+            pkg_check_modules(WEBKIT2 REQUIRED webkit2gtk-4.0)
+        endif()
 
     target_link_libraries(webview INTERFACE ${GTK3_LIBRARIES} ${WEBKIT2_LIBRARIES} pthread)
     target_include_directories(webview SYSTEM PUBLIC ${GTK3_INCLUDE_DIRS} ${WEBKIT2_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR})

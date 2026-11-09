@@ -13,7 +13,18 @@ add_library(tray STATIC ${src})
 if (UNIX)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
-    pkg_check_modules(APPINDICATOR REQUIRED appindicator3-0.1)
+    # Ayatana is the maintained fork shipping on current distributions
+    # (Debian 13+, Ubuntu 24.04+); the legacy name only exists on older ones.
+    # Probe both so the tray builds everywhere; the header path follows the
+    # winner (see core/linux/tray.hpp).
+    pkg_check_modules(APPINDICATOR ayatana-appindicator3-0.1)
+    if (APPINDICATOR_FOUND)
+        # PUBLIC: consumers include core/linux/tray.hpp, whose content depends
+        # on the platform just like the library itself.
+        target_compile_definitions(tray PUBLIC TRAYPP_AYATANA=1)
+    else()
+        pkg_check_modules(APPINDICATOR REQUIRED appindicator3-0.1)
+    endif()
 
     target_link_libraries(tray INTERFACE ${GTK3_LIBRARIES} ${APPINDICATOR_LIBRARIES})
 

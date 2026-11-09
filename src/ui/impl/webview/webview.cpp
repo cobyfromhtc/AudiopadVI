@@ -4,13 +4,13 @@
 #include <cstdint>
 #include <fancy.hpp>
 #include <filesystem>
+#include <helper/artwork/artwork.hpp>
 #include <helper/audio/linux/pulseaudio/pulseaudio.hpp>
 #include <helper/audio/windows/winsound.hpp>
 #include <helper/json/bindings.hpp>
+#include <helper/paths/paths.hpp>
 #include <helper/systeminfo/systeminfo.hpp>
 #include <helper/version/check.hpp>
-#include <fstream>
-#include <helper/base64/base64.hpp>
 #include <nfd.hpp>
 
 #ifdef _WIN32
@@ -100,7 +100,10 @@ namespace Audiopad::Objects
         webview->setUrl("file:///embedded/" + path.string());
 #endif
 #else
-        webview->setUrl("file://" + path.string());
+        //* Properly percent-encoded file URI: plain concatenation breaks on paths
+        //* with spaces/#/?/unicode (and on Windows drive letters), depending on
+        //* which URL parser gets to see it first.
+        webview->setUrl(Helpers::toFileUri(path));
 #endif
     }
     void WebView::show()
@@ -199,36 +202,60 @@ namespace Audiopad::Objects
                 std::filesystem::path p(outPath);
                 NFD_FreePathN(outPath);
 
-                std::ifstream file(p, std::ios::binary);
-                if (!file.is_open())
+                //* Bounded import: decode, downscale to the artwork dimension cap
+                //* and re-encode as PNG, so huge camera shots never travel through
+                //* the UI or the serialized configuration. Oversized or undecodable
+                //* files are rejected (empty string) instead of bloating the model.
+                auto imported = Helpers::Artwork::importImage(p.string());
+                if (!imported)
                 {
+                    Fancy::fancy.logTime().warning()
+                        << "Rejected image import (missing, oversized or undecodable): " << p << std::endl;
                     return "";
                 }
 
-                std::string buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-                file.close();
-
-                std::string ext = p.extension().string();
-                std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return static_cast<char>(std::tolower(c)); });
-                std::string mime = "image/png";
-                if (ext == ".jpg" || ext == ".jpeg") mime = "image/jpeg";
-                else if (ext == ".webp") mime = "image/webp";
-                else if (ext == ".gif") mime = "image/gif";
-                else if (ext == ".bmp") mime = "image/bmp";
-
-                return "data:" + mime + ";base64," + base64_encode(reinterpret_cast<const unsigned char *>(buffer.data()), buffer.size(), false);
+                return imported->dataUrl;
             }
             return "";
         }));
         webview->expose(Webview::Function("setSoundImage", [](const std::uint32_t &id, const std::string &image) {
-            Globals::gData.setSoundImage(id, image);
-            Globals::gConfig.data.set(Globals::gData);
+            if (image.empty())
+            {
+                Globals::gData.setSoundImage(id, "");
+                Globals::gConfig.save();
+                return true;
+            }
+
+            //* Re-bound whatever the UI sends back (its fallback file input can
+            //* still produce raw data URLs). Storage compaction to a managed
+            //* artwork reference happens on the debounced config write.
+            auto processed = Helpers::Artwork::importDataUrl(image);
+            if (!processed)
+            {
+                Fancy::fancy.logTime().warning() << "Rejected image update: payload too large or invalid" << std::endl;
+                return false;
+            }
+
+            Globals::gData.setSoundImage(id, processed->dataUrl);
             Globals::gConfig.save();
             return true;
         }));
         webview->expose(Webview::Function("setSoundsImage", [](const std::vector<std::uint32_t> &ids, const std::string &image) {
-            Globals::gData.setSoundsImage(ids, image);
-            Globals::gConfig.data.set(Globals::gData);
+            if (image.empty())
+            {
+                Globals::gData.setSoundsImage(ids, "");
+                Globals::gConfig.save();
+                return true;
+            }
+
+            auto processed = Helpers::Artwork::importDataUrl(image);
+            if (!processed)
+            {
+                Fancy::fancy.logTime().warning() << "Rejected image update: payload too large or invalid" << std::endl;
+                return false;
+            }
+
+            Globals::gData.setSoundsImage(ids, processed->dataUrl);
             Globals::gConfig.save();
             return true;
         }));
@@ -521,7 +548,6 @@ namespace Audiopad::Objects
         }
 
         //* Persist the rescanned model so freshly assigned folder ids survive restarts.
-        Globals::gConfig.data.set(Globals::gData);
         Globals::gConfig.save();
 
         webview->callFunction<void>(Webview::JavaScriptFunction("window.onTabAutoRefreshed", *refreshed));

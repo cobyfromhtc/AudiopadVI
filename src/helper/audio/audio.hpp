@@ -10,6 +10,8 @@
 #include <string>
 #include <var_guard.hpp>
 
+#include <helper/audio/engine.hpp>
+
 namespace Audiopad
 {
     namespace Objects
@@ -36,11 +38,10 @@ namespace Audiopad
 
             struct
             {
-                std::atomic<ma_device *> device;
-                std::atomic<ma_decoder *> decoder;
-                //* Sound boost gain (>= 1) applied by the audio callback. Held via shared_ptr so
-                //* every copy of this PlayingSound shares the same value with the real instance
-                //* the callback uses — the UI thread can store() it live, the audio thread load()s it.
+                //* Sound boost gain (>= 1) applied while mixing. Held via shared_ptr so
+                //* every copy of this PlayingSound shares the same value with the
+                //* engine voice the callback mixes — the UI thread can store() it live,
+                //* the audio callback load()s it.
                 std::shared_ptr<std::atomic<float>> boostFactor;
             } raw;
 
@@ -51,13 +52,10 @@ namespace Audiopad
 
             std::atomic<bool> paused = false;
             std::atomic<bool> repeat = false;
-            std::atomic<bool> shouldSeek = false;
-            std::atomic<std::uint64_t> seekTo = 0;
             std::atomic<std::uint64_t> readInMs = 0;
 
             Sound sound;
             std::uint32_t id;
-            std::uint64_t buffer = 0;
 
             PlayingSound() = default;
             PlayingSound(const PlayingSound &);
@@ -67,11 +65,14 @@ namespace Audiopad
         {
             sxl::var_guard<std::map<std::uint32_t, std::shared_ptr<PlayingSound>>, std::recursive_mutex> playingSounds;
 
-            void onFinished(PlayingSound);
-            void onSoundSeeked(PlayingSound *, std::uint64_t);
-            void onSoundProgressed(PlayingSound *, std::uint64_t);
+            //* Mixing engine: one reused device per endpoint, preallocated voices,
+            //* producer-side decoding, atomic progress snapshots.
+            std::unique_ptr<::Audiopad::Audio::AudioEngine> engine;
 
-            static void data_callback(ma_device *device, void *output, const void *input, std::uint32_t frameCount);
+            void finishSound(const std::uint32_t &);      //* queue thread: natural completion
+            void progressSound(const std::uint32_t &, std::uint64_t); //* publisher thread
+
+            static ::Audiopad::Audio::EngineConfig engineConfigFromEnvironment();
 
           public:
             std::optional<PlayingSound> pause(const std::uint32_t &);
@@ -88,6 +89,10 @@ namespace Audiopad
 
             //* Combined amplification factor (global settings boost * tab boost) for the given sound.
             static float getBoostFactor(const std::uint32_t &soundId);
+
+            //* Live volume update (0..100) for a playing stream — replaces direct
+            //* masterVolumeFactor pokes on per-sound devices.
+            bool setVolume(const std::uint32_t &playingId, int volumePercent);
 
             std::vector<AudioDevice> getAudioDevices();
             std::vector<Objects::PlayingSound> getPlayingSounds();

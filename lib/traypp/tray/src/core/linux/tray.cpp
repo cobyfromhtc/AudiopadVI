@@ -1,6 +1,10 @@
 #if defined(__linux__)
 #include <core/linux/tray.hpp>
+#if defined(TRAYPP_AYATANA)
+#include <libayatana-appindicator/app-indicator.h>
+#else
 #include <libappindicator/app-indicator.h>
+#endif
 #include <stdexcept>
 
 #include <components/button.hpp>

@@ -1,21 +1,37 @@
 #include "audio.hpp"
 #include <algorithm>
-#include <chrono>
+#include <cstdlib>
 #include <core/global/globals.hpp>
 #include <fancy.hpp>
-#include <thread>
-#if defined(_WIN32)
-#include <helper/misc/misc.hpp>
-#endif
-
-#define MINIAUDIO_IMPLEMENTATION
-#include <miniaudio.h>
 
 namespace Audiopad::Objects
 {
-#if defined(_WIN32)
-    using Audiopad::Helpers::widen;
-#endif
+    namespace
+    {
+        //* Environment overrides for latency tuning — see README ("Tuning playback
+        //* latency"). All values are validated; invalid input falls back to defaults.
+        std::optional<std::uint64_t> environmentNumber(const char *name)
+        {
+            const char *value = std::getenv(name); // NOLINT(concurrency-mt-unsafe)
+            if (value == nullptr || *value == '\0')
+            {
+                return std::nullopt;
+            }
+            try
+            {
+                const auto parsed = std::stoull(value);
+                if (parsed > 0xffffffffull)
+                {
+                    return std::nullopt;
+                }
+                return parsed;
+            }
+            catch (...)
+            {
+                return std::nullopt;
+            }
+        }
+    } // namespace
 
     void Audio::setup()
     {
@@ -25,7 +41,7 @@ namespace Audiopad::Objects
         Fancy::fancy.logTime().message() << "Detecting audio devices..." << std::endl;
         for (const auto &device : getAudioDevices())
         {
-            Fancy::fancy.logTime().message() << "  - Found device: " << device.name 
+            Fancy::fancy.logTime().message() << "  - Found device: " << device.name
                                              << " | Default: " << (device.isDefault ? "Yes" : "No") << std::endl;
             if (device.isDefault)
             {
@@ -38,11 +54,78 @@ namespace Audiopad::Objects
             }
 #endif
         }
+
+        const auto config = engineConfigFromEnvironment();
+        engine = std::make_unique<Audiopad::Audio::AudioEngine>(
+            Audiopad::Audio::EngineEvents{
+                //* Natural completion: the device consumed every frame of the clip.
+                //* Hops onto the shared queue for teardown bookkeeping and the GUI
+                //* event — the engine callback only published a two-word message.
+                [this](std::uint32_t id) {
+                    Globals::gQueue.push_unique(static_cast<std::uint64_t>(id), [this, id] { finishSound(id); });
+                },
+                //* Progress: read from an atomic position snapshot by the engine's
+                //* bounded-rate publisher — never dispatched from the audio callback.
+                [this](std::uint32_t id, std::uint64_t ms) { progressSound(id, ms); },
+                [](const std::string &message) { Fancy::fancy.logTime().message() << message << std::endl; },
+            },
+            config);
+
+        Fancy::fancy.logTime().message()
+            << "Audio engine ready (period " << config.periodMs << " ms, ring " << config.ringMs << " ms, "
+            << config.maxVoicesPerStream << " voices/stream, clip cache " << (config.clipCacheBytes / (1024 * 1024))
+            << " MiB)" << std::endl;
     }
+
+    Audiopad::Audio::EngineConfig Audio::engineConfigFromEnvironment()
+    {
+        Audiopad::Audio::EngineConfig config;
+        if (const auto period = environmentNumber("AUDIOPAD_PERIOD_MS"))
+        {
+            config.periodMs = static_cast<std::uint32_t>(*period);
+        }
+        if (const auto ring = environmentNumber("AUDIOPAD_RING_MS"))
+        {
+            config.ringMs = static_cast<std::uint32_t>(*ring);
+        }
+        if (const auto cache = environmentNumber("AUDIOPAD_CLIP_CACHE_MB"))
+        {
+            config.clipCacheBytes = *cache * (1024ull * 1024ull);
+        }
+        if (const auto progress = environmentNumber("AUDIOPAD_PROGRESS_HZ"))
+        {
+            config.progressHz = static_cast<std::uint32_t>(*progress);
+        }
+        if (const auto voices = environmentNumber("AUDIOPAD_MAX_VOICES"))
+        {
+            config.maxVoicesPerStream = static_cast<std::uint32_t>(*voices);
+        }
+        return config;
+    }
+
     void Audio::destroy()
     {
-        stopAll();
+        {
+            auto scoped = playingSounds.scoped();
+            scoped->clear();
+        }
+
+        if (engine)
+        {
+            const auto &stats = engine->stats();
+            const auto callbacks = stats.callbacks.load();
+            if (callbacks > 0)
+            {
+                Fancy::fancy.logTime().message()
+                    << "Audio engine summary: " << callbacks << " callbacks, worst callback "
+                    << (stats.worstCallbackNs.load() / 1000) << " us, " << stats.underruns.load() << " underruns ("
+                    << stats.underrunFrames.load() << " frames), " << stats.voicesReused.load() << " voices reused"
+                    << std::endl;
+            }
+            engine.reset();
+        }
     }
+
     float Audio::getBoostFactor(const std::uint32_t &soundId)
     {
         //* Clamp each boost level to a sane 100%..400% window so corrupted configs cannot
@@ -66,162 +149,74 @@ namespace Audiopad::Objects
 
         return factor > 16.f ? 16.f : factor;
     }
+
     std::optional<PlayingSound> Audio::play(const Objects::Sound &sound,
                                             const std::optional<Objects::AudioDevice> &playbackDevice,
                                             bool isRemoteStream, bool reportsProgress)
     {
         static std::atomic<std::uint32_t> id = 0;
 
-        auto *decoder = new ma_decoder;
-#if defined(_WIN32)
-        auto res = ma_decoder_init_file_w(widen(sound.path).c_str(), nullptr, decoder);
-#else
-        auto res = ma_decoder_init_file(sound.path.c_str(), nullptr, decoder);
-#endif
-
-        if (res != MA_SUCCESS)
+        if (!engine)
         {
-            Fancy::fancy.logTime().failure() << "Failed to create decoder from file: " << sound.path << ", error: " >>
-                res << std::endl;
-            delete decoder;
-
             return std::nullopt;
         }
 
-        auto *device = new ma_device;
-        auto config = ma_device_config_init(ma_device_type_playback);
+        const AudioDevice &endpoint = playbackDevice ? *playbackDevice : defaultPlayback;
 
-        ma_uint64 length_in_pcm_frames{};
-        ma_decoder_get_length_in_pcm_frames(decoder, &length_in_pcm_frames);
-
-        config.dataCallback = data_callback;
-        config.periodSizeInMilliseconds = 100;
-        config.sampleRate = decoder->outputSampleRate;
-        config.playback.format = decoder->outputFormat;
-        config.playback.channels = decoder->outputChannels;
-
-        auto pSound = std::make_shared<PlayingSound>();
-        config.pUserData = reinterpret_cast<void *>(static_cast<PlayingSound *>(pSound.get()));
-
-        if (playbackDevice)
-        {
-            config.playback.pDeviceID = &playbackDevice->raw.id;
-        }
-        else
-        {
-            config.playback.pDeviceID = &defaultPlayback.raw.id;
-        }
-
-        if (ma_device_init(nullptr, &config, device) != MA_SUCCESS)
-        {
-            Fancy::fancy.logTime().failure() << "Failed to create device" << std::endl;
-            ma_decoder_uninit(decoder);
-            delete decoder;
-            delete device;
-
-            return std::nullopt;
-        }
-
-        // Ensure decoder matches the actual initialized device format, channels, and sample rate.
-        // On Windows WASAPI shared mode, device->sampleRate is often 48000Hz while MP3s are 44100Hz.
-        // Re-initializing the decoder with the device's format enables miniaudio's high-quality
-        // internal resampling so MP3s play at normal speed and do not cut off before completion.
-        if (decoder->outputFormat != device->playback.format ||
-            decoder->outputChannels != device->playback.channels ||
-            decoder->outputSampleRate != device->sampleRate)
-        {
-            ma_decoder_uninit(decoder);
-            auto decoderConfig = ma_decoder_config_init(device->playback.format, device->playback.channels, device->sampleRate);
-#if defined(_WIN32)
-            res = ma_decoder_init_file_w(widen(sound.path).c_str(), &decoderConfig, decoder);
-#else
-            res = ma_decoder_init_file(sound.path.c_str(), &decoderConfig, decoder);
-#endif
-            if (res != MA_SUCCESS)
-            {
-                Fancy::fancy.logTime().failure() << "Failed to re-initialize decoder to device format: " << sound.path << std::endl;
-                ma_device_uninit(device);
-                delete decoder;
-                delete device;
-                return std::nullopt;
-            }
-            ma_decoder_get_length_in_pcm_frames(decoder, &length_in_pcm_frames);
-        }
-
+        float volumePercent = 0.f;
         if (isRemoteStream)
         {
-            if (sound.remoteVolume)
-            {
-                device->masterVolumeFactor = static_cast<float>(*sound.remoteVolume) / 100.f;
-            }
-            else
-            {
-                device->masterVolumeFactor = static_cast<float>(Globals::gSettings.remoteVolume) / 100.f;
-            }
+            volumePercent = sound.remoteVolume ? static_cast<float>(*sound.remoteVolume)
+                                               : static_cast<float>(Globals::gSettings.remoteVolume);
         }
         else
         {
-            if (sound.localVolume)
-            {
-                device->masterVolumeFactor = static_cast<float>(*sound.localVolume) / 100.f;
-            }
-            else
-            {
-                device->masterVolumeFactor = static_cast<float>(Globals::gSettings.localVolume) / 100.f;
-            }
+            volumePercent = sound.localVolume ? static_cast<float>(*sound.localVolume)
+                                              : static_cast<float>(Globals::gSettings.localVolume);
         }
 
-        if (ma_device_start(device) != MA_SUCCESS)
+        //* The boost gain is captured on a shared atomic — the engine's mix callback
+        //* amplifies with it live (miniaudio's masterVolumeFactor only attenuates,
+        //* values above 1 are ignored), and the UI can store() new values mid-play.
+        auto boostFactor = std::make_shared<std::atomic<float>>(getBoostFactor(sound.id));
+
+        const auto soundId = ++id;
+        auto info = engine->play(soundId, sound.path, &endpoint.raw.id, endpoint.name, volumePercent, boostFactor,
+                                 false, reportsProgress);
+        if (!info)
         {
-            ma_device_uninit(device);
-            ma_decoder_uninit(decoder);
-
-            delete device;
-            delete decoder;
-
-            Fancy::fancy.logTime().warning() << "Failed to play sound " << sound.path << std::endl;
-
+            Fancy::fancy.logTime().failure() << "Failed to play sound: " << sound.path << std::endl;
             return std::nullopt;
         }
 
-        auto soundId = ++id;
-
+        auto pSound = std::make_shared<PlayingSound>();
         pSound->id = soundId;
         pSound->sound = sound;
-        pSound->raw.device = device;
-        pSound->raw.decoder = decoder;
         pSound->isRemote = isRemoteStream;
         pSound->reportsProgress = reportsProgress;
-        //* Capture the boost gain on a shared atomic — the data callback amplifies the decoded
-        //* frames with it (miniaudio's masterVolumeFactor only attenuates, values above 1 are ignored).
-        pSound->raw.boostFactor = std::make_shared<std::atomic<float>>(getBoostFactor(sound.id));
-        pSound->length = length_in_pcm_frames;
-        pSound->sampleRate = device->sampleRate;
-        pSound->playbackDevice = playbackDevice ? *playbackDevice : defaultPlayback;
-        pSound->lengthInMs = static_cast<std::uint64_t>(static_cast<double>(pSound->length) /
-                                                        static_cast<double>(device->sampleRate) * 1000);
+        pSound->raw.boostFactor = boostFactor;
+        pSound->length = info->lengthFrames;
+        pSound->sampleRate = info->sampleRate;
+        pSound->playbackDevice = endpoint;
+        pSound->lengthInMs = info->lengthInMs;
 
         playingSounds->emplace(soundId, pSound);
         return *pSound;
     }
+
     void Audio::stopAll()
     {
-        auto scoped = playingSounds.scoped();
-        while (!scoped->empty())
         {
-            auto &sound = scoped->begin()->second;
-            if (sound->raw.device && sound->raw.decoder)
-            {
-                ma_device_uninit(sound->raw.device);
-                ma_decoder_uninit(sound->raw.decoder);
-            }
+            auto scoped = playingSounds.scoped();
+            scoped->clear();
+        }
 
-            sound->raw.device = nullptr;
-            sound->raw.decoder = nullptr;
-
-            scoped->erase(sound->id);
+        if (engine)
+        {
+            engine->stopAll();
         }
     }
+
     bool Audio::stop(const std::uint32_t &soundId)
     {
         auto scoped = playingSounds.scoped();
@@ -246,25 +241,23 @@ namespace Audiopad::Objects
         {
             for (auto id : idsToStop)
             {
-                if (scoped->find(id) != scoped->end())
+                auto it = scoped->find(id);
+                if (it == scoped->end())
                 {
-                    auto soundCopy = *scoped->at(id);
-                    auto &sound = scoped->at(id);
-                    if (sound->raw.device && sound->raw.decoder)
-                    {
-                        ma_device_uninit(sound->raw.device);
-                        ma_decoder_uninit(sound->raw.decoder);
-                    }
+                    continue;
+                }
 
-                    sound->raw.device = nullptr;
-                    sound->raw.decoder = nullptr;
+                auto soundCopy = *it->second;
+                scoped->erase(it);
 
-                    scoped->erase(id);
+                if (engine)
+                {
+                    engine->stop(id);
+                }
 
-                    if (Globals::gGui)
-                    {
-                        Globals::gGui->onSoundFinished(soundCopy);
-                    }
+                if (Globals::gGui)
+                {
+                    Globals::gGui->onSoundFinished(soundCopy);
                 }
             }
             return true;
@@ -274,6 +267,7 @@ namespace Audiopad::Objects
                                          << std::endl;
         return false;
     }
+
     namespace
     {
         std::shared_ptr<PlayingSound> findPlayingSound(
@@ -293,7 +287,7 @@ namespace Audiopad::Objects
             }
             return nullptr;
         }
-    }
+    } // namespace
 
     std::optional<PlayingSound> Audio::pause(const std::uint32_t &soundId)
     {
@@ -303,9 +297,9 @@ namespace Audiopad::Objects
         {
             if (!sound->paused)
             {
-                if (sound->raw.device && ma_device_get_state(sound->raw.device) == ma_device_state_started)
+                if (engine)
                 {
-                    ma_device_stop(sound->raw.device);
+                    engine->pause(sound->id);
                 }
                 sound->paused = true;
             }
@@ -317,6 +311,7 @@ namespace Audiopad::Objects
                                          << std::endl;
         return std::nullopt;
     }
+
     std::optional<PlayingSound> Audio::repeat(const std::uint32_t &soundId, bool shouldRepeat)
     {
         auto scoped = playingSounds.scoped();
@@ -324,6 +319,10 @@ namespace Audiopad::Objects
         if (sound)
         {
             sound->repeat = shouldRepeat;
+            if (engine)
+            {
+                engine->setRepeat(sound->id, shouldRepeat);
+            }
             return *sound;
         }
 
@@ -331,6 +330,7 @@ namespace Audiopad::Objects
                                          << ", sound does not exist" << std::endl;
         return std::nullopt;
     }
+
     std::optional<PlayingSound> Audio::resume(const std::uint32_t &soundId)
     {
         auto scoped = playingSounds.scoped();
@@ -339,9 +339,9 @@ namespace Audiopad::Objects
         {
             if (sound->paused)
             {
-                if (sound->raw.device && ma_device_get_state(sound->raw.device) == ma_device_state_stopped)
+                if (engine)
                 {
-                    ma_device_start(sound->raw.device);
+                    engine->resume(sound->id);
                 }
                 sound->paused = false;
             }
@@ -353,113 +353,89 @@ namespace Audiopad::Objects
                                          << std::endl;
         return std::nullopt;
     }
-    void Audio::onFinished(PlayingSound sound)
-    {
-        // Allow hardware playback buffer to drain fully before uninitializing
-        // to prevent cutting off the last ~100-200ms of sound playback
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
+    void Audio::finishSound(const std::uint32_t &soundId)
+    {
+        //* Runs on the shared queue thread after the engine's callback flagged the
+        //* voice as drained — every frame was already handed to the device, so no
+        //* drain delay is needed: the reused stream keeps playing what the callback
+        //* already mixed.
         auto scoped = playingSounds.scoped();
-        if (scoped->find(sound.id) != scoped->end())
+        auto it = scoped->find(soundId);
+        if (it == scoped->end())
         {
-            ma_device_uninit(sound.raw.device);
-            ma_decoder_uninit(sound.raw.decoder);
+            return; //* user stopped it in the meantime — expected, not a warning
+        }
 
-            sound.raw.device = nullptr;
-            sound.raw.decoder = nullptr;
-
+        auto sound = *it->second;
+        if (Globals::gGui)
+        {
             Globals::gGui->onSoundFinished(sound);
-            scoped->erase(sound.id);
         }
-        else
-        {
-            Fancy::fancy.logTime().warning() << "Sound finished but is not playing" << std::endl;
-        }
+        scoped->erase(it);
     }
-    void Audio::onSoundProgressed(PlayingSound *sound, std::uint64_t frames)
-    {
-        sound->readFrames += frames;
-        sound->buffer += frames;
 
-        // Emit updates roughly every 100ms for smooth progress tracking
-        if (sound->buffer >= (sound->sampleRate / 10))
+    void Audio::progressSound(const std::uint32_t &soundId, std::uint64_t ms)
+    {
+        //* Runs on the engine's bounded-rate publisher thread (default 30 Hz).
+        auto scoped = playingSounds.scoped();
+        auto it = scoped->find(soundId);
+        if (it == scoped->end())
         {
-            if (sound->length > 0)
-            {
-                sound->readInMs = static_cast<std::uint64_t>(
-                    (static_cast<double>(sound->readFrames) / static_cast<double>(sound->length)) *
-                    static_cast<double>(sound->lengthInMs));
-            }
-
-            if (Globals::gGui)
-            {
-                Globals::gGui->onSoundProgressed(*sound);
-            }
-
-            sound->buffer = 0;
+            return;
         }
-    }
-    void Audio::onSoundSeeked(PlayingSound *sound, std::uint64_t frame)
-    {
-        sound->shouldSeek = false;
-        sound->readFrames = frame;
+
+        auto &sound = it->second;
+        sound->readInMs.store(ms, std::memory_order_relaxed);
         if (sound->length > 0)
         {
-            sound->readInMs = static_cast<std::uint64_t>((static_cast<double>(frame) / static_cast<double>(sound->length)) *
-                                                         static_cast<double>(sound->lengthInMs));
+            sound->readFrames = static_cast<std::uint64_t>(static_cast<double>(ms) /
+                                                               static_cast<double>(sound->lengthInMs) *
+                                                               static_cast<double>(sound->length));
         }
-        else
-        {
-            sound->readInMs = 0;
-        }
-        sound->buffer = 0;
 
-        if (Globals::gGui && sound->reportsProgress)
+        if (Globals::gGui)
         {
             Globals::gGui->onSoundProgressed(*sound);
         }
     }
+
     std::optional<PlayingSound> Audio::seek(const std::uint32_t &soundId, std::uint64_t position)
     {
         auto scoped = playingSounds.scoped();
         auto sound = findPlayingSound(*scoped, soundId);
         if (sound)
         {
+            std::uint64_t seekFrame = 0;
             if (sound->lengthInMs > 0)
             {
-                sound->seekTo =
-                    static_cast<std::uint64_t>((static_cast<double>(position) / static_cast<double>(sound->lengthInMs)) *
-                                               static_cast<double>(sound->length));
-            }
-            else
-            {
-                sound->seekTo = 0;
+                seekFrame = static_cast<std::uint64_t>((static_cast<double>(position) / static_cast<double>(sound->lengthInMs)) *
+                                                       static_cast<double>(sound->length));
             }
 
-            if (sound->seekTo > sound->length)
+            if (seekFrame > sound->length)
             {
-                sound->seekTo = sound->length;
+                seekFrame = sound->length;
             }
 
-            if (sound->paused.load())
+            if (engine)
             {
-                // When paused, audio device thread is stopped.
-                // Seek decoder directly and immediately so position is preserved!
-                if (sound->raw.decoder)
-                {
-                    ma_decoder_seek_to_pcm_frame(sound->raw.decoder, sound->seekTo);
-                }
-                onSoundSeeked(sound.get(), sound->seekTo);
+                engine->seek(sound->id, seekFrame);
             }
-            else
+
+            sound->readFrames = seekFrame;
+            sound->readInMs.store(position, std::memory_order_relaxed);
+
+            //* The engine's producer applies the seek within one callback period;
+            //* the UI position is published immediately from here (calling thread).
+            if (Globals::gGui && sound->reportsProgress)
             {
-                // When playing, flag for audio thread to seek before reading next PCM frames
-                sound->shouldSeek = true;
+                Globals::gGui->onSoundProgressed(*sound);
             }
 
             auto rtn = *sound;
-            rtn.readFrames = sound->seekTo;
-            rtn.readInMs = position;
+            rtn.readFrames = seekFrame;
+            rtn.readInMs.store(position, std::memory_order_relaxed);
             return rtn;
         }
 
@@ -467,152 +443,16 @@ namespace Audiopad::Objects
                                          << std::endl;
         return std::nullopt;
     }
-    //* Amplifies decoded PCM frames in-place with hard saturation at the format's ceiling,
-    //* so boosting above 100% can never wrap integer samples into harsh digital noise.
-    //* miniaudio's own masterVolumeFactor only ever attenuates (values above 1 are ignored),
-    //* which is why the boost gain has to be applied here on the decoded data directly.
-    static void applyBoostGain(void *frames, ma_uint64 frameCount, ma_format format, ma_uint32 channels, float gain)
+
+    bool Audio::setVolume(const std::uint32_t &playingId, int volumePercent)
     {
-        if (frames == nullptr || gain <= 1.f || frameCount == 0 || channels == 0)
+        if (!engine)
         {
-            return;
+            return false;
         }
-
-        const ma_uint64 samples = frameCount * channels;
-
-        switch (format)
-        {
-            case ma_format_f32:
-            {
-                auto *p = static_cast<float *>(frames);
-                for (ma_uint64 i = 0; i < samples; ++i)
-                {
-                    const float v = p[i] * gain;
-                    p[i] = v > 1.f ? 1.f : (v < -1.f ? -1.f : v);
-                }
-                break;
-            }
-            case ma_format_s16:
-            {
-                auto *p = static_cast<ma_int16 *>(frames);
-                for (ma_uint64 i = 0; i < samples; ++i)
-                {
-                    const float v = static_cast<float>(p[i]) * gain;
-                    p[i] = v > 32767.f ? 32767 : (v < -32768.f ? -32768 : static_cast<ma_int16>(v));
-                }
-                break;
-            }
-            case ma_format_s32:
-            {
-                auto *p = static_cast<ma_int32 *>(frames);
-                for (ma_uint64 i = 0; i < samples; ++i)
-                {
-                    const double v = static_cast<double>(p[i]) * gain;
-                    p[i] = v > 2147483647.0 ? 2147483647
-                                           : (v < -2147483648.0 ? (-2147483647 - 1) : static_cast<ma_int32>(v));
-                }
-                break;
-            }
-            case ma_format_u8:
-            {
-                auto *p = static_cast<ma_uint8 *>(frames);
-                for (ma_uint64 i = 0; i < samples; ++i)
-                {
-                    const float v = (static_cast<int>(p[i]) - 128) * gain + 128.f;
-                    p[i] = v > 255.f ? 255 : (v < 0.f ? 0 : static_cast<ma_uint8>(v));
-                }
-                break;
-            }
-            case ma_format_s24:
-            {
-                //* Packed little-endian 24-bit samples: sign-extend, gain, clamp, write back.
-                auto *p = static_cast<ma_uint8 *>(frames);
-                for (ma_uint64 i = 0; i < samples; ++i)
-                {
-                    ma_uint8 *b = p + (i * 3);
-                    const std::int32_t s = (static_cast<std::int32_t>(static_cast<std::int8_t>(b[2])) << 16) |
-                                           (static_cast<std::int32_t>(b[1]) << 8) | static_cast<std::int32_t>(b[0]);
-                    const double v = static_cast<double>(s) * gain;
-                    const std::int32_t c = v > 8388607.0 ? 8388607
-                                                        : (v < -8388608.0 ? -8388608 : static_cast<std::int32_t>(v));
-                    b[0] = static_cast<ma_uint8>(c & 0xFF);
-                    b[1] = static_cast<ma_uint8>((c >> 8) & 0xFF);
-                    b[2] = static_cast<ma_uint8>((c >> 16) & 0xFF);
-                }
-                break;
-            }
-            default:
-                break;
-        }
+        return engine->setVolume(playingId, static_cast<float>(volumePercent));
     }
-    void Audio::data_callback(ma_device *device, void *output, [[maybe_unused]] const void *input,
-                              std::uint32_t frameCount)
-    {
-        auto *sound = reinterpret_cast<PlayingSound *>(device->pUserData);
-        if (!sound)
-        {
-            return;
-        }
 
-        if (!sound->raw.decoder)
-        {
-            return;
-        }
-
-        // Apply pending seek BEFORE reading new frames to prevent reading/playing stale audio!
-        if (sound->shouldSeek)
-        {
-            ma_decoder_seek_to_pcm_frame(sound->raw.decoder, sound->seekTo);
-            Globals::gAudio.onSoundSeeked(sound, sound->seekTo);
-        }
-
-        ma_uint64 readFrames{};
-        ma_decoder_read_pcm_frames(sound->raw.decoder, output, frameCount, &readFrames);
-
-        if (readFrames < frameCount && output)
-        {
-            ma_decoder *pDecoder = sound->raw.decoder.load();
-            if (pDecoder)
-            {
-                ma_uint32 bytesPerFrame = ma_get_bytes_per_frame(pDecoder->outputFormat, pDecoder->outputChannels);
-                ma_uint8 *pOutputBytes = reinterpret_cast<ma_uint8 *>(output);
-                memset(pOutputBytes + (readFrames * bytesPerFrame), 0, (frameCount - readFrames) * bytesPerFrame);
-            }
-        }
-
-        //* Sound boost: amplify the freshly decoded frames with the (live-updatable) gain.
-        if (output && readFrames > 0 && sound->raw.boostFactor)
-        {
-            const float gain = sound->raw.boostFactor->load(std::memory_order_relaxed);
-            if (gain > 1.f)
-            {
-                ma_decoder *pBoostDecoder = sound->raw.decoder.load();
-                if (pBoostDecoder != nullptr)
-                {
-                    applyBoostGain(output, readFrames, pBoostDecoder->outputFormat, pBoostDecoder->outputChannels, gain);
-                }
-            }
-        }
-
-        if (sound->reportsProgress && readFrames > 0)
-        {
-            Globals::gAudio.onSoundProgressed(sound, readFrames);
-        }
-
-        if (readFrames <= 0 && !sound->shouldSeek)
-        {
-            if (sound->repeat)
-            {
-                ma_decoder_seek_to_pcm_frame(sound->raw.decoder, 0);
-                Globals::gAudio.onSoundSeeked(sound, 0);
-            }
-            else
-            {
-                Globals::gQueue.push_unique(reinterpret_cast<std::uintptr_t>(device),
-                                            [sound = *sound] { Globals::gAudio.onFinished(sound); });
-            }
-        }
-    }
     std::vector<AudioDevice> Audio::getAudioDevices()
     {
         std::string defaultName;
@@ -641,6 +481,7 @@ namespace Audiopad::Objects
         if (result != MA_SUCCESS)
         {
             Fancy::fancy.logTime().failure() << "Failed to get playback devices!" << std::endl;
+            ma_context_uninit(&context);
             return {};
         }
 
@@ -711,16 +552,11 @@ namespace Audiopad::Objects
 
         id = other.id;
         sound = other.sound;
-        buffer = other.buffer;
 
-        seekTo.store(other.seekTo);
-        paused.store(other.paused);
-        repeat.store(other.repeat);
-        readInMs.store(other.readInMs);
-        shouldSeek.store(other.shouldSeek);
+        paused.store(other.paused.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        repeat.store(other.repeat.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        readInMs.store(other.readInMs.load(std::memory_order_relaxed), std::memory_order_relaxed);
 
-        raw.device.store(other.raw.device);
-        raw.decoder.store(other.raw.decoder);
         raw.boostFactor = other.raw.boostFactor;
         playbackDevice = other.playbackDevice;
         isRemote = other.isRemote;
@@ -740,16 +576,11 @@ namespace Audiopad::Objects
 
         id = other.id;
         sound = other.sound;
-        buffer = other.buffer;
 
-        seekTo.store(other.seekTo);
-        paused.store(other.paused);
-        repeat.store(other.repeat);
-        readInMs.store(other.readInMs);
-        shouldSeek.store(other.shouldSeek);
+        paused.store(other.paused.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        repeat.store(other.repeat.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        readInMs.store(other.readInMs.load(std::memory_order_relaxed), std::memory_order_relaxed);
 
-        raw.device.store(other.raw.device);
-        raw.decoder.store(other.raw.decoder);
         raw.boostFactor = other.raw.boostFactor;
         playbackDevice = other.playbackDevice;
         isRemote = other.isRemote;

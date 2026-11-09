@@ -367,7 +367,6 @@ namespace Audiopad::Objects
 
         //* Persist the freshly scanned model — this anchors the unique folder ids
         //* assigned during the scan so navigation keeps working across restarts.
-        Globals::gConfig.data.set(Globals::gData);
         Globals::gConfig.save();
     }
     Window::~Window()
@@ -509,7 +508,6 @@ namespace Audiopad::Objects
 
         if (!tabsUnderRoot.empty())
         {
-            Globals::gConfig.data.set(Globals::gData);
             Globals::gConfig.save();
         }
 
@@ -821,7 +819,6 @@ namespace Audiopad::Objects
         auto newTab = Globals::gData.setTab(tabId, refreshed);
         if (newTab)
         {
-            Globals::gConfig.data.set(Globals::gData);
             Globals::gConfig.save();
             return newTab;
         }
@@ -1022,7 +1019,6 @@ namespace Audiopad::Objects
         auto newTab = Globals::gData.setTab(tabId, refreshed);
         if (newTab)
         {
-            Globals::gConfig.data.set(Globals::gData);
             Globals::gConfig.save();
             return newTab;
         }
@@ -1116,7 +1112,6 @@ namespace Audiopad::Objects
         auto newTab = Globals::gData.setTab(tabId, *tab);
         if (newTab)
         {
-            Globals::gConfig.data.set(Globals::gData);
             Globals::gConfig.save();
             return newTab;
         }
@@ -1150,7 +1145,6 @@ namespace Audiopad::Objects
         auto newTab = Globals::gData.setTab(id, *tab);
         if (newTab)
         {
-            Globals::gConfig.data.set(Globals::gData);
             Globals::gConfig.save();
             return newTab;
         }
@@ -1235,7 +1229,6 @@ namespace Audiopad::Objects
         newTab = getTabContent(newTab);
 
         Globals::gData.addTab(std::move(newTab));
-        Globals::gConfig.data.set(Globals::gData);
         Globals::gConfig.save();
         return Globals::gData.getTabs();
     }
@@ -1797,8 +1790,10 @@ namespace Audiopad::Objects
             {
                 if (playingSound.sound.id == sound->get().id && !playingSound.isRemote)
                 {
-                    playingSound.raw.device.load()->masterVolumeFactor =
-                        static_cast<float>(localVolume ? *localVolume : Globals::gSettings.localVolume) / 100.f;
+                    //* Live volume update on the engine voice (streams are shared
+                    //* between clips now, so a per-device factor would leak across).
+                    Globals::gAudio.setVolume(playingSound.id,
+                                              localVolume ? *localVolume : Globals::gSettings.localVolume);
                     if (playingSound.raw.boostFactor)
                     {
                         playingSound.raw.boostFactor->store(Globals::gAudio.getBoostFactor(sound->get().id),
@@ -1826,8 +1821,8 @@ namespace Audiopad::Objects
             {
                 if (playingSound.sound.id == sound->get().id && playingSound.isRemote)
                 {
-                    playingSound.raw.device.load()->masterVolumeFactor =
-                        static_cast<float>(remoteVolume ? *remoteVolume : Globals::gSettings.remoteVolume) / 100.f;
+                    Globals::gAudio.setVolume(playingSound.id,
+                                              remoteVolume ? *remoteVolume : Globals::gSettings.remoteVolume);
                     if (playingSound.raw.boostFactor)
                     {
                         playingSound.raw.boostFactor->store(Globals::gAudio.getBoostFactor(sound->get().id),
@@ -1871,8 +1866,7 @@ namespace Audiopad::Objects
                     newVolume = sound.remoteVolume ? *sound.remoteVolume : Globals::gSettings.remoteVolume;
                 }
 
-                playingSound.raw.device.load()->masterVolumeFactor =
-                    static_cast<float>(newVolume) / 100.f;
+                Globals::gAudio.setVolume(playingSound.id, newVolume);
                 if (playingSound.raw.boostFactor)
                 {
                     playingSound.raw.boostFactor->store(Globals::gAudio.getBoostFactor(sound.id),
@@ -2040,8 +2034,8 @@ namespace Audiopad::Objects
             auto newTab = Globals::gData.setTab(id, *tab);
 
             //* Live-update the boost gain of every currently playing stream so the boost slider reacts
-            //* instantly instead of only affecting the next playback. The gain is applied by the audio
-            //* callback (see Audio::data_callback); masterVolumeFactor keeps handling plain volume only.
+            //* instantly instead of only affecting the next playback. The gain is applied by the mixing
+            //* callback (see AudioEngine::dataCallback) on top of the per-voice volume factor.
             for (auto &playingSound : Globals::gAudio.getPlayingSounds())
             {
                 if (playingSound.raw.boostFactor)

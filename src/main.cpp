@@ -143,9 +143,9 @@ int main(int argc, char **arguments)
         gAudioBackend->destroy();
     }
 #endif
-    gConfig.data.set(gData);
-    gConfig.settings = gSettings;
-    gConfig.save();
+    //* Synchronous final commit — flush() snapshots the live model itself, so no
+    //* intermediate copy is needed.
+    gConfig.flush();
 
     return 0;
 }

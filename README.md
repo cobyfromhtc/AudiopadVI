@@ -91,9 +91,14 @@ Before building, ensure you have installed:
    ```
 
 3. **Generate build configurations**:
-   Requires **CMake 3.1 or higher**. Create a build directory and configure the project:
+   Requires **CMake 3.16 or higher**. Create a build directory and configure the project:
    ```bash
+   # Day-to-day development:
    cmake -B build -DCMAKE_BUILD_TYPE=Debug
+   # Shippable builds — compare these before enabling IPO/LTO
+   # (see “Tuning playback latency” below and tests/README.md):
+   cmake -B build -DCMAKE_BUILD_TYPE=Release
+   cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
    ```
 
 4. **Compile the binary**:
@@ -107,14 +112,53 @@ Before building, ensure you have installed:
      ```
 
 5. **Run the application**:
-   * The compiled executable and its dependent `dist/` web content will be located inside the build directory:
-     ```powershell
-     # Windows
-     .\build\Debug\audiopad.exe
-     
-     # Linux
-     ./build/audiopad
-     ```
+   * The compiled executable and its dependent `dist/` web content will be located inside the build directory.
+     The web UI assets are staged beside the executable automatically for every generator and configuration:
+   ```powershell
+   # Windows
+   .\build\Debug\audiopad.exe
+
+   # Linux
+   ./build/audiopad
+   ```
+
+6. **Run the regression tests and the latency benchmark** (built by default):
+   ```bash
+   ctest --test-dir build --output-on-failure
+   ```
+   See `tests/README.md` for the test index, ThreadSanitizer instructions and
+   the build-mode comparison workflow.
+
+---
+
+### Tuning playback latency
+
+The audio engine reads a few environment variables at startup. Defaults are
+conservative; on a machine with healthy audio drivers you can usually halve the
+trigger-to-output latency by shrinking the period:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `AUDIOPAD_PERIOD_MS` | 10 | requested device period — how often the mixing callback runs; the dominant term of the trigger-to-output latency |
+| `AUDIOPAD_RING_MS` | 512 | per-voice PCM ring depth — absorbs decoder jitter; too small causes underruns |
+| `AUDIOPAD_CLIP_CACHE_MB` | 64 | decoded-PCM cache budget in MiB (0 disables); frequently triggered clips skip the decoder entirely on replay |
+| `AUDIOPAD_PROGRESS_HZ` | 30 | UI progress publisher rate |
+| `AUDIOPAD_MAX_VOICES` | 32 | preallocated voices per output device |
+
+Tuning procedure:
+
+1. Start the app and watch the startup log — every opened stream reports the
+   period the backend actually granted, e.g.
+   `Audio stream 'Speakers' opened: 48000 Hz, 2 ch, period 480 frames (10 ms actual, 10 ms requested)`.
+   The requested and granted values differ when the driver clamps them — tune against the granted one.
+2. Sweep `AUDIOPAD_PERIOD_MS` (5, 10, 20, 40) and watch the underrun counters
+   in the shutdown summary (`N underruns (M frames)`).
+3. Pick the smallest period that keeps underruns at zero, then shrink
+   `AUDIOPAD_RING_MS` until underruns appear and back off one step.
+
+The `benchmark_latency` test target measures the same numbers headlessly (null
+backend, no audio hardware needed); `tests/README.md` documents how to compare
+Release vs RelWithDebInfo and whether IPO/LTO is worth enabling.
 
 ---
 
