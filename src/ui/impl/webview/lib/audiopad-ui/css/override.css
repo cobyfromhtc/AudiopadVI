@@ -1690,7 +1690,16 @@ body.sidebar-drag-active .sidebar-drop-zone {
   align-items: center;
   gap: 10px;
   overflow: hidden;
-  flex: 0 1 auto;
+  /* FIXED-WIDTH slot: the title's length must never resize or shift the
+     playback controls. With a content-sized slot, playing a long-titled
+     sound grew this cluster (~+180px), which squeezed the flexible
+     transport next to it — the timeline visibly shrank and the loop /
+     play / stop buttons slid toward the volume cluster. A fixed
+     flex-basis keeps the transport's position and the timeline's width
+     identical for every title (long names ellipsize inside the slot —
+     see .dock-track-text). 240px reserves enough room for the
+     "Playing stream • 12:34 / 56:78" subtitle beside the equalizer. */
+  flex: 0 0 240px;
   min-width: 0;
 }
 
@@ -1698,9 +1707,10 @@ body.sidebar-drag-active .sidebar-drop-zone {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* The transport bar is wide now — let the track info breathe instead of
-     clipping the subtitle the way the old compact bar had to. */
-  max-width: min(340px, 30vw);
+  /* Fills the fixed .dock-track-info slot; the slot itself is the cap, so
+     the ellipsis lands at the exact same position for every title. */
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .dock-track-title {
@@ -3940,8 +3950,10 @@ body.sidebar-drag-active .sidebar-drop-zone {
 /* ============================================================ */
 
 @media (max-width: 1180px) {
-  .dock-track-text {
-    max-width: min(260px, 26vw);
+  .dock-track-info {
+    /* Narrower fixed slot keeps the same guarantee — the transport never
+       reacts to a title — while freeing width for the timeline. */
+    flex-basis: 180px;
   }
 
   /* The route pill duplicates the Mic Active badge in the header — dropping
@@ -4052,6 +4064,10 @@ body.sidebar-drag-active .sidebar-drop-zone {
 
   .dock-track-info {
     justify-content: center;
+    /* The dock stacks vertically here, so the fixed horizontal slot basis
+       must not leak into the vertical axis (in a column flex container
+       flex-basis sizes the height). */
+    flex: 0 0 auto;
   }
 
   /* Stacked dock: the chip strip spans the full width so several playing

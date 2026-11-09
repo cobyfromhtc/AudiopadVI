@@ -170,6 +170,18 @@ let state = {
   isDraggingSeekbar: false,
   dragSeekPosition: 0,
 
+  //* Pause/resume round-trips through the backend while the native progress
+  //* publisher keeps posting updateSound events asynchronously (30 Hz). An
+  //* event generated just BEFORE the backend applied the pause can land just
+  //* AFTER the click — carrying the stale pre-pause state. Worse: once the
+  //* voice is paused its position freezes, so the publisher stops sending
+  //* events for it entirely (it only publishes when the position changes) and
+  //* nothing ever corrects the reverted button. Every user transport action
+  //* therefore records its intent here; contradicting in-flight updates are
+  //* pinned to the intent until the backend's authoritative promise
+  //* resolution (or the grace expiry) settles the state.
+  transportIntent: null,
+
   //* Stop-bookkeeping for the stale-event guard: the native audio thread posts
   //* progress callbacks (window.updateSound) asynchronously, so an update that
   //* was queued just before a stop can land AFTER the JS state was cleared —
@@ -428,6 +440,14 @@ async function init() {
       }
     });
 
+    // Wheel scrolling across the "Now Playing" chips (delegated on the
+    // persistent document — the dock's innerHTML is swapped on every render,
+    // so binding on the row itself would silently die with the first swap).
+    // Non-passive: the handler must be allowed to cancel the default
+    // (useless here) vertical scroll when it converts the wheel into
+    // horizontal list scrolling.
+    document.addEventListener('wheel', handleDockChipsWheel, { passive: false });
+
     // Hook C++ callbacks to update our state dynamically
     bindCppCallbacks();
 
@@ -536,6 +556,18 @@ function bindCppCallbacks() {
     const isTracked = Object.prototype.hasOwnProperty.call(state.playingSounds, soundKey);
     if (!isTracked && isStalePlaybackEvent()) return;
 
+    //* Transport-intent guard: while a pause/resume round-trip is still in
+    //* flight the publisher may deliver an event that was generated BEFORE
+    //* the backend applied the change — it carries the pre-click paused state
+    //* and would visibly revert the transport button (and, for a paused
+    //* voice, no follow-up event ever corrects it because the publisher only
+    //* posts while the position advances). Pin the field to the user's
+    //* intent; the promise resolution confirms the real state shortly.
+    const intent = activeTransportIntentFor(soundKey);
+    if (intent && !!playingSound.paused !== intent.paused) {
+      playingSound = Object.assign({}, playingSound, { paused: intent.paused });
+    }
+
     state.playingSounds[soundKey] = playingSound;
     if (state.currentPlayingSoundId === null || state.currentPlayingSoundId === undefined) {
       state.currentPlayingSoundId = soundKey;
@@ -546,6 +578,7 @@ function bindCppCallbacks() {
   window.finishSound = function(playingSound) {
     if (playingSound && playingSound.sound) {
       delete state.playingSounds[playingSound.sound.id];
+      clearTransportIntent(playingSound.sound.id);
       const tileProgress = document.getElementById(`deck-progress-${playingSound.sound.id}`);
       if (tileProgress) {
         tileProgress.style.width = '0%';
@@ -871,17 +904,54 @@ function isStalePlaybackEvent() {
          (now - state.lastStopAt) < PLAYBACK_STOP_GRACE_MS;
 }
 
+//* --- Transport intent guard (pause/resume) -----------------------------
+//* How long a user's pause/resume click stays protected against contradicting
+//* in-flight updateSound events. The native shell answers the click with an
+//* authoritative PlayingSound promise long before this expires, so the window
+//* only needs to cover the publisher's posting latency plus scheduling.
+const TRANSPORT_INTENT_GRACE_MS = 750;
+
+let transportActionSeq = 0;
+
+//* Records that the user just requested `paused` for the sound keyed by
+//* `soundKey`. `seq` tags the action so a newer click can supersede an older
+//* in-flight one (rapid pause→resume without waiting for the first answer).
+function recordTransportIntent(soundKey, paused) {
+  state.transportIntent = { key: String(soundKey), paused: !!paused, at: Date.now(), seq: ++transportActionSeq };
+}
+
+//* The still-fresh intent for `soundKey`, or null. Lazily expires stale ones.
+function activeTransportIntentFor(soundKey) {
+  const intent = state.transportIntent;
+  if (!intent || intent.key !== String(soundKey)) return null;
+  if (Date.now() - intent.at > TRANSPORT_INTENT_GRACE_MS) {
+    state.transportIntent = null;
+    return null;
+  }
+  return intent;
+}
+
+//* Drops the intent when its sound leaves the playing set (stopped/finished)
+//* so it can never pin the paused flag of a later, freshly started playback.
+function clearTransportIntent(soundKey) {
+  if (state.transportIntent && state.transportIntent.key === String(soundKey)) {
+    state.transportIntent = null;
+  }
+}
+
 //* Clears every trace of playback from the UI state immediately — the dock,
 //* tile indicators and the "playing" titles reset on the very first Escape
 //* press instead of waiting for (or being undone by) backend round-trips.
 function clearAllPlaybackState() {
   state.playingSounds = {};
   state.currentPlayingSoundId = null;
+  state.transportIntent = null;
   cleanupScrubberDrag();
 }
 
 async function handleStopSound(soundId) {
   state.lastStopAt = Date.now();
+  clearTransportIntent(soundId);
 
   const ps = state.playingSounds[soundId];
   const targetId = (ps && ps.id) ? ps.id : soundId;
@@ -5238,27 +5308,99 @@ function updateDockControlsInPlace() {
 async function handleTogglePlayPause() {
   const active = getActivePlayback();
   if (!active || !active.details) return;
-  const { details, playId } = active;
+  const { soundKey, details, playId } = active;
 
   const willPause = !details.paused;
+  const actionSeq = transportActionSeq + 1;
   details.paused = willPause;
+  recordTransportIntent(soundKey, willPause);
   updateDockControlsInPlace();
+  setDockChipPaused(soundKey, willPause);
 
   try {
     if (willPause) {
       if (window.pauseSound) {
-        await window.pauseSound(playId);
+        applyAuthoritativeTransportState(await window.pauseSound(playId), soundKey, actionSeq);
       }
     } else {
       if (window.resumeSound) {
-        await window.resumeSound(playId);
+        applyAuthoritativeTransportState(await window.resumeSound(playId), soundKey, actionSeq);
       }
     }
   } catch (e) {
     console.warn("toggle play/pause failed:", e);
-    details.paused = !willPause;
-    updateDockControlsInPlace();
+    revertTransportStateIfCurrent(soundKey, actionSeq, willPause);
   }
+}
+
+//* Applies the PlayingSound the backend resolved the pause/resume call with.
+//* This is the authoritative answer to the click — in the native shell it is
+//* also the ONLY confirmation a paused voice ever sends, because the progress
+//* publisher stops posting once the position freezes (it only publishes while
+//* the position advances). Without applying it, one click could be silently
+//* reverted by a stale in-flight update with no event left to correct it —
+//* the "pause only works after several clicks" bug.
+function applyAuthoritativeTransportState(resolved, soundKey, actionSeq) {
+  if (resolved && resolved.sound) {
+    //* A newer transport click for the same sound superseded this answer —
+    //* let that click's own resolution settle the state instead.
+    const intent = state.transportIntent;
+    if (intent && intent.key === String(soundKey) && intent.seq > actionSeq) return;
+
+    //* NOTE: the intent is deliberately NOT dropped here. The promise answer
+    //* and the progress events travel through different dispatch paths
+    //* (webview RPC resolution vs. publisher events posted from the audio
+    //* thread), so a pre-pause event can still be executed AFTER this
+    //* resolution lands. The intent keeps pinning `paused` until it expires,
+    //* which is what makes one-click pause reliable regardless of ordering.
+    const targetKey = (resolved.sound.id !== undefined) ? resolved.sound.id : soundKey;
+    if (Object.prototype.hasOwnProperty.call(state.playingSounds, targetKey)) {
+      state.playingSounds[targetKey] = resolved;
+      setDockChipPaused(targetKey, resolved.paused);
+      updatePlaybackDockInPlace(resolved);
+    }
+    return;
+  }
+
+  if (resolved === null) {
+    //* Explicit backend failure (the native shell resolves a failed
+    //* pause/resume with null — e.g. the sound finished mid-click). Undo the
+    //* optimistic flip so the button never claims a state the audio layer
+    //* never reached. `undefined` (demo preview bindings) is not a failure:
+    //* there the update events confirm the optimistic state instead.
+    revertTransportStateIfCurrent(soundKey, actionSeq, null);
+  }
+  //* Any other falsy value (undefined): keep the optimistic state and wait
+  //* for the regular update events to confirm it.
+}
+
+//* Restores the pre-click paused flag — used when the backend explicitly
+//* failed the action. Skipped when a newer click already took over (checked
+//* through the intent's sequence tag) so a failed older request can never
+//* stomp the state a newer user action just set.
+function revertTransportStateIfCurrent(soundKey, actionSeq, willPause) {
+  const intent = state.transportIntent;
+  if (intent && intent.key === String(soundKey) && intent.seq > actionSeq) return;
+
+  if (state.transportIntent && state.transportIntent.seq === actionSeq) {
+    state.transportIntent = null;
+  }
+  const details = state.playingSounds[soundKey];
+  if (!details) return;
+  details.paused = (willPause === null) ? !details.paused : !willPause;
+  updateDockControlsInPlace();
+  setDockChipPaused(soundKey, details.paused);
+}
+
+//* Instantly mirrors a pause/resume flip onto the sound's "Now Playing" chip
+//* (dimmed state + tooltip) without a full re-render.
+function setDockChipPaused(soundKey, paused) {
+  const chipEl = document.getElementById(`dock-chip-${soundKey}`);
+  if (!chipEl) return;
+  chipEl.classList.toggle('paused', !!paused);
+  const ps = state.playingSounds[soundKey];
+  const name = (ps && ps.sound && ps.sound.name) ? `: ${ps.sound.name}` : '';
+  chipEl.title = `${paused ? 'Paused' : 'Playing'} — click to control this sound${name}`;
 }
 
 async function handleToggleRepeat() {
@@ -5286,6 +5428,7 @@ async function handleStopActiveSound() {
   const { playId, soundId } = active;
 
   state.lastStopAt = Date.now();
+  clearTransportIntent(soundId);
 
   //* Clear the UI entry first so the dock resets instantly; the backend call
   //* below only tears down the native stream.
@@ -5563,6 +5706,44 @@ function renderDockSoundChip(entry, isActive) {
       </div>
     </div>
   `;
+}
+
+//* Mouse-wheel scrolling for the "Now Playing" strip. The chips list runs
+//* horizontally, but a plain wheel gesture only produces vertical deltas —
+//* over the strip they did nothing at all (the list never scrolls vertically
+//* and the page below the dock has nothing to scroll). Translating the wheel
+//* into horizontal chip scrolling lets one roll walk through every playing
+//* sound, exactly like the request describes. Delegated from the persistent
+//* document node (the dock is re-rendered by innerHTML constantly), and
+//* registered non-passive so the default vertical scroll can be cancelled.
+function handleDockChipsWheel(event) {
+  const target = event.target;
+  if (!target || !target.closest) return;
+  const strip = target.closest('.dock-multitrack-strip');
+  if (!strip) return;
+
+  const row = strip.querySelector('.dock-chips-row');
+  if (!row) return;
+
+  const maxScrollLeft = row.scrollWidth - row.clientWidth;
+  if (maxScrollLeft <= 1) return; // every chip already fits — nothing to scroll
+
+  // Prefer the vertical wheel (up/down rolls), fall back to true horizontal
+  // deltas from trackpads and tilt wheels.
+  let delta = (Math.abs(event.deltaY) >= Math.abs(event.deltaX)) ? event.deltaY : event.deltaX;
+  if (!delta) return;
+
+  // Normalize line/page based deltas (older mice / some Linux toolkits) so
+  // every input device scrolls the list by a comparable distance.
+  if (event.deltaMode === 1) {
+    delta *= 16;
+  } else if (event.deltaMode === 2) {
+    delta *= row.clientWidth;
+  }
+
+  const next = Math.max(0, Math.min(row.scrollLeft + delta, maxScrollLeft));
+  event.preventDefault();
+  row.scrollLeft = next;
 }
 
 function renderPlaybackDock() {
