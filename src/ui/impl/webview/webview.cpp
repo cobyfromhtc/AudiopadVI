@@ -927,7 +927,16 @@ namespace Audiopad::Objects
     }
     void WebView::onSoundProgressed(const PlayingSound &sound)
     {
-        webview->callFunction<void>(Webview::JavaScriptFunction("window.updateSound", sound));
+        //* Progress ticks fire at up to 30 Hz per reporting stream. Shipping the
+        //* whole PlayingSound JSON every tick used to push the clip's artwork
+        //* (base64 data URL) through the webview on every single event — the
+        //* script queue saturated, the timeline froze mid-clip and every UI
+        //* action (reordering included) stalled behind the backlog. The dock
+        //* only needs the scalar position, so the payload is a handful of
+        //* numbers the frontend merges into its tracked entry.
+        webview->callFunction<void>(Webview::JavaScriptFunction("window.soundProgress", sound.sound.id, sound.id,
+                                                                sound.readInMs.load(), sound.lengthInMs,
+                                                                sound.paused.load(), sound.repeat.load()));
         if (Globals::gControlServer && sound.reportsProgress)
         {
             Globals::gControlServer->broadcastProgress(sound.sound.id, sound.readInMs.load(), sound.lengthInMs,

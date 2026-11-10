@@ -58,7 +58,15 @@ namespace Webview
 
         virtual std::string formatCode(const std::string &);
         virtual void handleRawCallRequest(const std::string &);
-        JavaScriptFunction &callFunctionInternal(JavaScriptFunction &&);
+        //* Dispatches the call into the webview and returns the future that
+        //* completes when the JS side posts its ack. The future is taken before
+        //* the script is dispatched, so it stays valid even when the ack
+        //* resolves and erases the request entry before this call returns.
+        std::shared_future<nlohmann::json> callFunctionInternal(JavaScriptFunction &&);
+
+        //* Escapes a serialized JSON value for embedding inside the JavaScript
+        //* template literal used by the RPC resolve script.
+        static std::string escapeForTemplateLiteral(const std::string &);
 
       public:
         BaseWindow(const BaseWindow &) = delete;
@@ -108,15 +116,20 @@ namespace Webview
         /// freeze the webview
         template <typename T = void> std::future<T> callFunction(JavaScriptFunction &&function)
         {
-            auto &future = callFunctionInternal(std::forward<JavaScriptFunction>(function));
-            auto result = future.getResult();
+            auto result = callFunctionInternal(std::forward<JavaScriptFunction>(function));
 
-            return std::async(std::launch::async, [result] {
-                if constexpr (!std::is_same_v<T, void>)
-                {
-                    return result.get().get<T>();
-                }
-            });
+            if constexpr (std::is_same_v<T, void>)
+            {
+                //* Fire-and-forget calls never observe the result: spawning a
+                //* worker thread per call (30 progress events per second and
+                //* more) only burns threads. The request entry is still cleaned
+                //* up when the JS side posts its ack.
+                return {};
+            }
+            else
+            {
+                return std::async(std::launch::async, [result] { return result.get().get<T>(); });
+            }
         }
 
         /// \effects Runs the given javascript code

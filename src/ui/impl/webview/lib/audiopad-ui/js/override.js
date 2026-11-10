@@ -214,6 +214,7 @@ let state = {
   currentPlayingSoundId: null,
   isDraggingSeekbar: false,
   dragSeekPosition: 0,
+  seekbarLastActivityAt: 0, // last scrubber pointer activity — the poll watchdog frees stuck drags
 
   //* Pause/resume round-trips through the backend while the native progress
   //* publisher keeps posting updateSound events asynchronously (30 Hz). An
@@ -543,6 +544,12 @@ async function init() {
           renderApp();
         }
       }
+      // Watchdog: release a stuck scrubber drag (lost pointer capture / missed
+      // pointerup) — a stuck session silently drops every progress tick and
+      // freezes the timeline at the scrub position.
+      if (state.isDraggingSeekbar && Date.now() - (state.seekbarLastActivityAt || 0) > 5000) {
+        cleanupScrubberDrag();
+      }
       // Keep the Target Window status pill in sync (cheap call, throttled by the poll)
       if (state.settings.targetWindow) {
         refreshOpenWindows(false);
@@ -613,6 +620,38 @@ function bindCppCallbacks() {
     state.currentPlayingSoundId = playingSound.sound.id;
     cleanupScrubberDrag();
     renderApp();
+  };
+
+  //* Slim progress tick posted by the native shell at up to 30 Hz per
+  //* reporting stream. Carries only scalars (no serialized PlayingSound —
+  //* that payload includes the clip's base64 artwork and drowned the webview
+  //* script queue when it shipped thirty times a second). The tick is merged
+  //* into the tracked playing entry; the dock updater works exactly like it
+  //* did for full updateSound events.
+  window.soundProgress = function(soundId, playId, readInMs, lengthInMs, paused, repeat) {
+    if (soundId === undefined || soundId === null) return;
+    const soundKey = soundId;
+
+    const tracked = state.playingSounds[soundKey];
+    if (!tracked) {
+      //* Untracked: the sound was stopped or finished and its entry was
+      //* already cleared — an in-flight tick must not resurrect it. The next
+      //* play re-registers the full entry via onSoundPlayed.
+      return;
+    }
+
+    tracked.readInMs = readInMs || 0;
+    if (lengthInMs) tracked.lengthInMs = lengthInMs;
+    if (playId !== undefined && playId !== null) tracked.id = playId;
+    tracked.repeat = !!repeat;
+
+    //* Same transport-intent guard as updateSound: while a pause/resume
+    //* round-trip is in flight a tick generated before the backend applied
+    //* the change must not visibly revert the transport button.
+    const intent = activeTransportIntentFor(soundKey);
+    tracked.paused = intent ? !!intent.paused : !!paused;
+
+    updatePlaybackDockInPlace(tracked);
   };
 
   window.updateSound = function(playingSound) {
@@ -3714,9 +3753,14 @@ async function handleManualDrop(soundId, event) {
   //* so sounds of other folders keep their relative arrangement.
   const visible = currentViewSounds(tab).map(s => s.id);
   const from = visible.indexOf(draggedId);
+  if (from === -1 || !visible.includes(soundId)) { renderApp(); return; }
+  //* Drop-on-row semantics: the dragged sound takes the target row's slot.
+  //* The removal happens FIRST, and the target index is recomputed on the
+  //* post-removal list — using the pre-removal index landed downward drops one
+  //* slot past the highlighted row.
+  visible.splice(from, 1);
   const to = visible.indexOf(soundId);
-  if (from === -1 || to === -1) { renderApp(); return; }
-  visible.splice(to, 0, visible.splice(from, 1)[0]);
+  visible.splice(to, 0, draggedId);
 
   const visibleSet = new Set(visible);
   let cursor = 0;
@@ -7099,6 +7143,7 @@ function handleScrubberPointerDown(event) {
   if (!bar) return;
 
   state.isDraggingSeekbar = true;
+  state.seekbarLastActivityAt = Date.now();
   bar.classList.add('dragging');
 
   try {
@@ -7110,6 +7155,14 @@ function handleScrubberPointerDown(event) {
   bar.onpointermove = handleScrubberPointerMove;
   bar.onpointerup = handleScrubberPointerUp;
   bar.onpointercancel = handleScrubberPointerCancel;
+
+  //* Safety net: pointer capture can fail or be lost (element re-render mid-
+  //* drag, window switching, capture stealing). If the bar itself never sees
+  //* the pointerup, the window-level listener below still ends the session —
+  //* otherwise isDraggingSeekbar stays stuck true and every progress tick is
+  //* silently dropped, freezing the timeline at the scrub position.
+  window.addEventListener('pointerup', handleScrubberWindowPointerEnd, true);
+  window.addEventListener('pointercancel', handleScrubberWindowPointerEnd, true);
 }
 
 function updateScrubberFromEvent(event) {
@@ -7146,7 +7199,26 @@ function updateScrubberFromEvent(event) {
 
 function handleScrubberPointerMove(event) {
   if (!state.isDraggingSeekbar) return;
+  state.seekbarLastActivityAt = Date.now();
   updateScrubberFromEvent(event);
+}
+
+function commitScrubberSeek() {
+  const active = getActivePlayback();
+  if (!active || !active.details) return;
+
+  const seekTargetMs = state.dragSeekPosition;
+  active.details.readInMs = seekTargetMs;
+
+  return (async () => {
+    try {
+      if (window.seekSound) {
+        await window.seekSound(active.playId, seekTargetMs);
+      }
+    } catch (e) {
+      console.warn("seekSound error:", e);
+    }
+  })();
 }
 
 async function handleScrubberPointerUp(event) {
@@ -7164,20 +7236,38 @@ async function handleScrubberPointerUp(event) {
     bar.onpointercancel = null;
   }
   state.isDraggingSeekbar = false;
+  removeScrubberWindowListeners();
 
-  const active = getActivePlayback();
-  if (!active || !active.details) return;
+  await commitScrubberSeek();
+}
 
-  const seekTargetMs = state.dragSeekPosition;
-  active.details.readInMs = seekTargetMs;
+//* Window-level capture-phase net: runs for every pointerup while a scrub
+//* session is live. When the bar handled the event itself this is a no-op
+//* (the flag is already false); when the bar missed it, the seek is still
+//* committed from the last dragged position instead of leaking the drag.
+function handleScrubberWindowPointerEnd(event) {
+  if (!state.isDraggingSeekbar) return;
+  const bar = document.getElementById('playback-dock-bar');
+  const target = event && event.target;
+  //* Only defer to the bar's own handler for real element targets inside it —
+  //* the target can also be the window/document (non-Node), which contains()
+  //* would throw on.
+  if (bar && target && target.nodeType === 1 && bar.contains(target)) return;
 
-  try {
-    if (window.seekSound) {
-      await window.seekSound(active.playId, seekTargetMs);
-    }
-  } catch (e) {
-    console.warn("seekSound error:", e);
+  state.isDraggingSeekbar = false;
+  removeScrubberWindowListeners();
+  if (bar) {
+    bar.classList.remove('dragging');
+    bar.onpointermove = null;
+    bar.onpointerup = null;
+    bar.onpointercancel = null;
   }
+  commitScrubberSeek();
+}
+
+function removeScrubberWindowListeners() {
+  window.removeEventListener('pointerup', handleScrubberWindowPointerEnd, true);
+  window.removeEventListener('pointercancel', handleScrubberWindowPointerEnd, true);
 }
 
 function handleScrubberPointerCancel(event) {
@@ -7186,6 +7276,7 @@ function handleScrubberPointerCancel(event) {
 
 function cleanupScrubberDrag() {
   state.isDraggingSeekbar = false;
+  removeScrubberWindowListeners();
   const bar = document.getElementById('playback-dock-bar');
   if (bar) {
     bar.classList.remove('dragging');

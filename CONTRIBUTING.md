@@ -137,6 +137,13 @@ audiopad/
 ├── deployment/                 # Packaging: Inno Setup installer (innosetup/), Debian
 │                               #   package (debian/), AppStream metadata & desktop entry
 │                               #   (appstream/, audiopad.desktop)
+├── .github/                    # Repository automation & community health files
+│   ├── ISSUE_TEMPLATE/         # Structured bug-report (yml) & feature-request forms
+│   ├── pull_request_template.md # PR checklist (build, tests, platform verification)
+│   ├── CODEOWNERS / FUNDING.yml
+│   └── workflows/              # CI: compile_linux / compile_windows, linux_debug /
+│                               #   windows_debug, build_flatpak, release, and draft /
+│                               #   full-source upload workflows
 ├── lib/                        # Vendored open-source libraries & submodules
 │   ├── backward-cpp/           # Stack trace and crash handling utility
 │   ├── cpp-httplib/            # Lightweight C++ HTTP/HTTPS networking client
@@ -155,14 +162,15 @@ audiopad/
 │   │   ├── enums/              # Core enumerations and error codes
 │   │   ├── global/             # Global instances and runtime singletons
 │   │   ├── hotkeys/            # OS-specific global keypress hooking (Windows/Linux)
-│   │   └── objects/            # Tab, Sound, Folder & Settings models, manual
-│   │                           #   ordering helpers (ordering.cpp/hpp)
+│   │   └── objects/            # Tab, Sound, Folder & Settings models (objects.hpp,
+│   │                           #   settings.hpp), data indexing (data.cpp/hpp) and
+│   │                           #   manual ordering helpers (ordering.cpp/hpp)
 │   ├── helper/                 # Utility services and background engines
 │   │   ├── apps/               # Running application discovery (target window picker)
 │   │   ├── artwork/            # Image import, downscaling, and data-URL handling
 │   │   ├── audio/              # miniaudio playback engine (engine.cpp), device
-│   │   │                       #   routing, PCM ring buffer, live mic monitor
-│   │   │                       #   (mic_monitor.cpp) and WASAPI / PulseAudio /
+│   │   │                       #   routing, PCM ring buffer (pcm_ring.hpp), live mic
+│   │   │                       #   monitor (mic_monitor.cpp) and WASAPI / PulseAudio /
 │   │   │                       #   PipeWire backends (windows/, linux/)
 │   │   ├── base64/             # Base64 encoding/decoding
 │   │   ├── controlserver/      # Local remote-control server: pairing, mobile
@@ -195,6 +203,11 @@ audiopad/
 │                               #   plus benchmark_latency (see tests/README.md)
 ├── CMakeLists.txt              # Primary CMake project configuration
 ├── FindPipeWire.cmake          # CMake lookup module for PipeWire
+├── CHANGELOG.md                # Pointer to the published changelog & V2 feature notes
+├── CODE_OF_CONDUCT.md          # Contributor Covenant — community standards
+├── CONTRIBUTING.md             # This guide
+├── LICENSE / NOTICE            # Licensing & third-party attribution
+├── README.md / SECURITY.md     # Project overview & vulnerability reporting policy
 └── .clang-format / .clang-tidy # Code styling & static analysis rules
 ```
 

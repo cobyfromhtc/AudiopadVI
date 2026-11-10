@@ -23,17 +23,18 @@ namespace Audiopad::Objects
 
     void Queue::push_unique(std::uint64_t id, std::function<void()> function)
     {
+        //* Dedupe and insert under one lock: checking and inserting in separate
+        //* critical sections let two threads pushing the same id interleave —
+        //* both passed the find(), the second emplace silently failed and the
+        //* newer job was dropped while the stale one still ran.
         {
-            std::lock_guard lock(queueMutex);
+            std::unique_lock lock(queueMutex);
             if (queue.find(id) != queue.end())
             {
                 return;
             }
+            queue.emplace(id, std::move(function));
         }
-
-        std::unique_lock lock(queueMutex);
-        queue.emplace(id, std::move(function));
-        lock.unlock();
 
         cv.notify_one();
     }
