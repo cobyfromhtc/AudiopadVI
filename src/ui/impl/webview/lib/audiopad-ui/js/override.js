@@ -144,13 +144,16 @@ let state = {
   policiesModal: {
     visible: false, soundId: null,
     triggerMode: 0, loopByDefault: false, stopOthers: false,
-    muteOthers: false, muteVoice: null, voicePreset: null, isVoiceSlot: false
+    muteOthers: false, muteVoice: null
   },
   moveModal: { visible: false, soundIds: [], targetTabId: null, targetFolderId: 0, moving: false },
-  manualDrag: { soundId: null, overSoundId: null },
+  //* Sound drag & drop (manual reordering). Highlights are applied straight to
+  //* the DOM — a renderApp() while a drag is live would swap innerHTML, remove
+  //* the drag source and cancel the whole HTML5 drag session.
+  manualDrag: { soundId: null, overSoundId: null, startedAt: 0 },
   //* Folder-tile drag & drop (reordering subfolders; `before` decides whether
   //* the drop inserts in front of or behind the hovered tile).
-  folderDrag: { folderId: null, overFolderId: null, before: true },
+  folderDrag: { folderId: null, overFolderId: null, before: true, startedAt: 0 },
   //* Whole-board loop state mirrored from the backend (mode: 0 off /
   //* 1 board-only / 2 board + subfolders).
   boardLoop: { mode: 0, tabId: null, index: 0, total: 0, currentSoundId: 0 },
@@ -522,6 +525,14 @@ async function init() {
       if (state.isDraggingSidebar && Date.now() - (state.sidebarDragStartedAt || 0) > 20000) {
         handleSidebarDragEnd();
       }
+      // Watchdog: same for sound-row and folder-tile drags — a stuck session
+      // would keep postponing re-renders (see renderApp) forever.
+      if (state.manualDrag.soundId !== null && Date.now() - (state.manualDrag.startedAt || 0) > 20000) {
+        handleManualDragEnd();
+      }
+      if (state.folderDrag.folderId !== null && Date.now() - (state.folderDrag.startedAt || 0) > 20000) {
+        handleFolderDragEnd();
+      }
       // Watchdog: release a stuck sidebar resize session (missed pointerup events)
       if (state.isResizingSidebar && Date.now() - (state.sidebarResizeStartedAt || 0) > 5000) {
         if (activeSidebarResizeCleanup) {
@@ -696,6 +707,11 @@ function bindCppCallbacks() {
   //* remote clients): keep the indicator state in sync without a round-trip.
   window.onMicMuteChanged = function(muted) {
     state.micMuted = !!muted;
+    renderApp();
+  };
+
+  window.onHearMyselfChanged = function(enabled) {
+    state.settings.hearMyself = !!enabled;
     renderApp();
   };
 
@@ -882,7 +898,8 @@ function isUiBusyForAutoRefresh() {
          (state.moveModal && state.moveModal.visible) ||
          (state.recorderModal && state.recorderModal.visible) ||
          (state.trimModal && state.trimModal.visible) ||
-         state.manualDrag.soundId !== null;
+         state.manualDrag.soundId !== null ||
+         state.folderDrag.folderId !== null;
 }
 
 // Show standard clean toast warning/success indicators
@@ -2142,6 +2159,10 @@ async function applyTabOrder(tabIds) {
     const updated = await window.moveTabs(tabIds);
     if (updated && Array.isArray(updated)) {
       state.tabs = updated;
+      //* The sidebar renders from the categories' own folder lists — reorder
+      //* them to match the new global tab order, otherwise the drop never
+      //* shows (the folder stays in its category, only its position moves).
+      syncSidebarCategoryOrderToTabs();
       if (activePathBefore) {
         const newActive = state.tabs.find(t => t.path === activePathBefore);
         if (newActive) state.activeTabId = newActive.id;
@@ -2155,6 +2176,21 @@ async function applyTabOrder(tabIds) {
     console.warn('moveTabs error:', e);
   }
   return false;
+}
+
+//* Reorders every category's folder list to follow the new global tab order.
+//* Each folder stays in its category (pruneSidebarCategories guarantees a tab
+//* lives in exactly one); only its position inside that category changes.
+function syncSidebarCategoryOrderToTabs() {
+  const globalOrder = new Map(state.tabs.map((t, index) => [t.path, index]));
+  state.sidebarCategories.forEach(category => {
+    (category.tabPaths || []).sort((a, b) => {
+      const ia = globalOrder.has(a) ? globalOrder.get(a) : Number.MAX_SAFE_INTEGER;
+      const ib = globalOrder.has(b) ? globalOrder.get(b) : Number.MAX_SAFE_INTEGER;
+      return ia - ib;
+    });
+  });
+  saveSidebarCategories();
 }
 
 // Moves a tab id inside the current global order so that it lands before/after the target tab
@@ -3469,7 +3505,7 @@ async function handleSaveTags() {
   handleCloseTagsModal();
 }
 
-//* --- Per-sound playback policies / voice slot ---
+//* --- Per-sound playback policies ---
 function handleOpenPoliciesModal(soundId) {
   closeContextMenu();
   const sound = findSoundInTabs(soundId);
@@ -3481,9 +3517,7 @@ function handleOpenPoliciesModal(soundId) {
     loopByDefault: !!sound.loopByDefault,
     stopOthers: !!sound.stopOthers,
     muteOthers: !!sound.muteOthers,
-    muteVoice: sound.muteVoice === undefined ? null : sound.muteVoice,
-    voicePreset: sound.voicePreset || null,
-    isVoiceSlot: !!sound.voicePreset
+    muteVoice: sound.muteVoice === undefined ? null : sound.muteVoice
   };
   renderApp();
 }
@@ -3499,27 +3533,30 @@ async function handleSavePolicies() {
   const modal = state.policiesModal;
   if (!modal.soundId) return;
 
-  if (modal.isVoiceSlot) {
-    if (window.setSoundVoiceSlot) {
-      try {
-        const updated = await window.setSoundVoiceSlot(modal.soundId, modal.voicePreset || 'deep');
-        if (updated) applySoundUpdateToTabs(updated);
-      } catch (e) { console.warn('setSoundVoiceSlot failed:', e); }
-    }
-  } else if (window.setSoundPolicies) {
-    try {
-      const updated = await window.setSoundPolicies(
-        modal.soundId,
-        modal.triggerMode,
-        modal.loopByDefault,
-        modal.stopOthers,
-        modal.muteOthers,
-        modal.muteVoice
-      );
-      if (updated) applySoundUpdateToTabs(updated);
-    } catch (e) { console.warn('setSoundPolicies failed:', e); }
+  if (!window.setSoundPolicies) {
+    showToast('Playback policies are not available', 'error');
+    handleClosePoliciesModal();
+    return;
   }
-  showToast('Playback policies saved', 'success');
+  try {
+    const updated = await window.setSoundPolicies(
+      modal.soundId,
+      modal.triggerMode,
+      modal.loopByDefault,
+      modal.stopOthers,
+      modal.muteOthers,
+      modal.muteVoice
+    );
+    if (updated) {
+      applySoundUpdateToTabs(updated);
+      showToast('Playback policies saved', 'success');
+    } else {
+      showToast('Failed to save playback policies', 'error');
+    }
+  } catch (e) {
+    console.warn('setSoundPolicies failed:', e);
+    showToast('Failed to save playback policies', 'error');
+  }
   handleClosePoliciesModal();
 }
 function applySoundUpdateToTabs(updated) {
@@ -3622,12 +3659,25 @@ function isManualSortActive() {
   const tab = state.tabs.find(t => t.id === state.activeTabId);
   return !!(tab && (tab.sortMode === 4 || tab.sortMode === '4'));
 }
+function clearManualDragHighlights() {
+  document.querySelectorAll('.sound-row.drag-over, .deck-tile.drag-over, .sound-grid-card.drag-over')
+    .forEach(el => el.classList.remove('drag-over'));
+}
+function clearManualDraggingClass() {
+  document.querySelectorAll('.sound-row.dragging, .deck-tile.dragging, .sound-grid-card.dragging')
+    .forEach(el => el.classList.remove('dragging'));
+}
 function handleManualDragStart(soundId, event) {
   state.manualDrag.soundId = soundId;
+  state.manualDrag.startedAt = Date.now();
   if (event && event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move';
     try { event.dataTransfer.setData('text/plain', 'sound:' + soundId); } catch (e) {}
   }
+  //* Direct class toggle — never renderApp() here: swapping innerHTML removes
+  //* the drag source and the engine cancels the drag session.
+  const el = event && event.currentTarget;
+  if (el && el.classList) el.classList.add('dragging');
 }
 function handleManualDragOver(soundId, event) {
   if (state.manualDrag.soundId === null) return;
@@ -3635,19 +3685,23 @@ function handleManualDragOver(soundId, event) {
   if (event && event.dataTransfer) event.dataTransfer.dropEffect = 'move';
   if (state.manualDrag.overSoundId !== soundId) {
     state.manualDrag.overSoundId = soundId;
-    renderApp();
+    clearManualDragHighlights();
+    const el = event && event.currentTarget;
+    if (el && el.classList) el.classList.add('drag-over');
   }
 }
 function handleManualDragLeave() {
   if (state.manualDrag.overSoundId !== null) {
     state.manualDrag.overSoundId = null;
-    renderApp();
+    clearManualDragHighlights();
   }
 }
 async function handleManualDrop(soundId, event) {
   if (event) event.preventDefault();
   const draggedId = state.manualDrag.soundId;
-  state.manualDrag = { soundId: null, overSoundId: null };
+  state.manualDrag = { soundId: null, overSoundId: null, startedAt: 0 };
+  clearManualDraggingClass();
+  clearManualDragHighlights();
   if (draggedId === null || draggedId === soundId) {
     renderApp();
     return;
@@ -3686,7 +3740,9 @@ async function handleManualDrop(soundId, event) {
   renderApp();
 }
 function handleManualDragEnd() {
-  state.manualDrag = { soundId: null, overSoundId: null };
+  state.manualDrag = { soundId: null, overSoundId: null, startedAt: 0 };
+  clearManualDraggingClass();
+  clearManualDragHighlights();
   renderApp();
 }
 
@@ -3704,12 +3760,19 @@ function flattenTabFolders(tab) {
   walk(tab ? tab.folders : []);
   return out;
 }
+function clearFolderDragHighlights() {
+  document.querySelectorAll('.subfolder-tile.drop-before, .subfolder-tile.drop-after')
+    .forEach(el => el.classList.remove('drop-before', 'drop-after'));
+}
 function handleFolderDragStart(folderId, event) {
   state.folderDrag.folderId = folderId;
+  state.folderDrag.startedAt = Date.now();
   if (event && event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move';
     try { event.dataTransfer.setData('text/plain', 'folder:' + folderId); } catch (e) {}
   }
+  const el = event && event.currentTarget;
+  if (el && el.classList) el.classList.add('dragging');
 }
 function handleFolderDragOver(folderId, event) {
   if (state.folderDrag.folderId === null) return;
@@ -3728,20 +3791,26 @@ function handleFolderDragOver(folderId, event) {
   if (state.folderDrag.overFolderId !== folderId || state.folderDrag.before !== before) {
     state.folderDrag.overFolderId = folderId;
     state.folderDrag.before = before;
-    renderApp();
+    //* Direct class toggle — a renderApp() here would swap innerHTML, remove
+    //* the dragged tile and cancel the in-flight drag session.
+    clearFolderDragHighlights();
+    const el = event && event.currentTarget;
+    if (el && el.classList) el.classList.add(before ? 'drop-before' : 'drop-after');
   }
 }
 function handleFolderDragLeave() {
   if (state.folderDrag.overFolderId !== null) {
     state.folderDrag.overFolderId = null;
-    renderApp();
+    clearFolderDragHighlights();
   }
 }
 async function handleFolderDrop(folderId, event) {
   if (event) event.preventDefault();
   const draggedId = state.folderDrag.folderId;
   const insertBefore = state.folderDrag.before;
-  state.folderDrag = { folderId: null, overFolderId: null, before: true };
+  state.folderDrag = { folderId: null, overFolderId: null, before: true, startedAt: 0 };
+  document.querySelectorAll('.subfolder-tile.dragging').forEach(el => el.classList.remove('dragging'));
+  clearFolderDragHighlights();
   if (draggedId === null || draggedId === folderId) {
     renderApp();
     return;
@@ -3781,7 +3850,9 @@ async function handleFolderDrop(folderId, event) {
   renderApp();
 }
 function handleFolderDragEnd() {
-  state.folderDrag = { folderId: null, overFolderId: null, before: true };
+  state.folderDrag = { folderId: null, overFolderId: null, before: true, startedAt: 0 };
+  document.querySelectorAll('.subfolder-tile.dragging').forEach(el => el.classList.remove('dragging'));
+  clearFolderDragHighlights();
   renderApp();
 }
 
@@ -4132,7 +4203,11 @@ async function handleToggleMicMute() {
 async function handleToggleHearMyself() {
   if (!window.toggleHearMyself) return;
   try {
-    await window.toggleHearMyself(); // settings arrive via the settings event
+    //* The backend returns the new state; the onHearMyselfChanged event covers
+    //* toggles from hotkeys / the remote panel. Never wait for a "settings"
+    //* push — the shell only sends those to the legacy (hidden) Vuetify store.
+    state.settings.hearMyself = !!(await window.toggleHearMyself());
+    renderApp();
   } catch (e) { console.warn('toggleHearMyself failed:', e); }
 }
 async function handleSelectVoicePreset(preset) {
@@ -4963,12 +5038,18 @@ function renderAppTopbar() {
 }
 
 //* Drag-to-move: forwarded to the native shell, which enters the system move
-//* loop (Aero Snap included). Only the left button starts a drag and the window
-//* control buttons are excluded so clicks on them never move the window.
+//* loop (Aero Snap included). Only the left button starts a drag. Every
+//* interactive control is excluded — once the native move loop owns the pointer
+//* session the webview never sees the mouse-up, so a press on a button that
+//* started a drag can never turn into a click.
+function isTopbarControlTarget(target) {
+  return !!(target && target.closest &&
+    target.closest('.topbar-btn, .topbar-live-btn, .topbar-voice-pill, button, input, select, [role="button"]'));
+}
 function handleTopbarPointerDown(event) {
   if (!isTopbarInteractive()) return;
   if (event.button !== 0) return;
-  if (event.target.closest('.topbar-btn')) return;
+  if (isTopbarControlTarget(event.target)) return;
   if (window.startWindowDrag) {
     try { window.startWindowDrag(); } catch (e) { /* shell binding missing — ignore */ }
   }
@@ -4989,9 +5070,11 @@ function handleShellBackgroundPointerDown(event) {
 }
 
 //* Double-click on the topbar toggles maximize, mirroring the native caption.
+//* Interactive controls are excluded — double-clicking a live button should
+//* activate the button, not maximize the window.
 function handleTopbarDoubleClick(event) {
   if (!isTopbarInteractive()) return;
-  if (event.target.closest('.topbar-btn')) return;
+  if (isTopbarControlTarget(event.target)) return;
   handleWindowMaximize();
 }
 
@@ -5036,6 +5119,13 @@ function renderApp() {
   // While the user drags the sidebar resize handle, re-rendering would destroy the
   // captured pointer element — the width is applied live instead.
   if (state.isResizingSidebar) return;
+
+  // Same for live HTML5 drags (sound rows, subfolder tiles): swapping innerHTML
+  // removes the drag source and the engine cancels the drag session. Re-renders
+  // are postponed — the drop / dragend handlers re-render once the drag ends,
+  // and the poll watchdog recovers from sessions that never saw a dragend.
+  if (state.manualDrag.soundId !== null) return;
+  if (state.folderDrag.folderId !== null) return;
 
   if (state.isDraggingSeekbar) {
     cleanupScrubberDrag();
@@ -7812,95 +7902,67 @@ function renderV2Modals() {
     `;
   }
 
-  //* Playback policies / voice slot
+  //* Playback policies
   if (state.policiesModal && state.policiesModal.visible) {
     const modal = state.policiesModal;
     html += `
       <div class="modal-overlay" onclick="handleClosePoliciesModal()">
         <div class="modal-card" style="max-width: 520px; width: 100%;" onclick="event.stopPropagation()">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--color-primary);">
-              ${modal.isVoiceSlot ? 'Voice Slot' : 'Playback Policies'}
-            </h3>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--color-primary);">Playback Policies</h3>
             <button class="action-btn" onclick="handleClosePoliciesModal()">${icons.close}</button>
           </div>
 
-          <label class="setting-toggle-row" style="border: 0; padding: 0; margin-bottom: 12px;">
+          <div class="settings-field">
+            <div class="settings-field-label">Trigger behaviour</div>
+            ${TRIGGER_MODES.map(mode => `
+              <button type="button" class="policy-option ${modal.triggerMode === mode.value ? 'active' : ''}"
+                      onclick="handlePolicyChange('triggerMode', ${mode.value})" style="width: 100%; text-align: left; margin-bottom: 6px;">
+                <strong>${mode.label}</strong>
+                <span style="display: block; font-size: 11px; color: var(--color-muted); font-weight: 400;">${mode.desc}</span>
+              </button>
+            `).join('')}
+          </div>
+
+          <label class="setting-toggle-row">
             <div class="setting-toggle-info">
-              <span class="setting-toggle-title">Live voice slot</span>
-              <span class="setting-toggle-desc">Triggering selects a live voice filter instead of playing a file.</span>
+              <span class="setting-toggle-title">Loop by default</span>
+              <span class="setting-toggle-desc">Start with repeat enabled every time this sound triggers.</span>
             </div>
             <span class="modern-switch">
-              <input type="checkbox" ${modal.isVoiceSlot ? 'checked' : ''} onchange="handlePolicyChange('isVoiceSlot', this.checked)">
+              <input type="checkbox" ${modal.loopByDefault ? 'checked' : ''} onchange="handlePolicyChange('loopByDefault', this.checked)">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </span>
+          </label>
+          <label class="setting-toggle-row">
+            <div class="setting-toggle-info">
+              <span class="setting-toggle-title">Stop other sounds</span>
+              <span class="setting-toggle-desc">Starting this sound stops every other clip.</span>
+            </div>
+            <span class="modern-switch">
+              <input type="checkbox" ${modal.stopOthers ? 'checked' : ''} onchange="handlePolicyChange('stopOthers', this.checked)">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </span>
+          </label>
+          <label class="setting-toggle-row">
+            <div class="setting-toggle-info">
+              <span class="setting-toggle-title">Mute other sounds</span>
+              <span class="setting-toggle-desc">Temporarily silence other clips while this one plays; their volumes return when it ends.</span>
+            </div>
+            <span class="modern-switch">
+              <input type="checkbox" ${modal.muteOthers ? 'checked' : ''} onchange="handlePolicyChange('muteOthers', this.checked)">
               <span class="switch-track"><span class="switch-thumb"></span></span>
             </span>
           </label>
 
-          ${modal.isVoiceSlot ? `
-            <div class="settings-field">
-              <div class="settings-field-label">Voice preset</div>
-              <div class="segmented-control" style="flex-wrap: wrap;">
-                ${VOICE_PRESETS.slice(1).map(preset => `
-                  <button type="button" class="segment ${modal.voicePreset === preset.value ? 'active' : ''}"
-                          onclick="handlePolicyChange('voicePreset', '${preset.value}')">${preset.label}</button>
-                `).join('')}
-              </div>
-              <p style="font-size: 11px; color: var(--color-muted); margin: 8px 0 0 0;">
-                Original, local DSP presets — the processed microphone is routed to your outputs (and to your own ears with "Hear myself").
-              </p>
+          <div class="settings-field" style="margin-top: 10px;">
+            <div class="settings-field-label">Mute microphone while this plays</div>
+            <div class="segmented-control">
+              <button type="button" class="segment ${modal.muteVoice === null ? 'active' : ''}" onclick="handlePolicyChange('muteVoice', null)">Inherit global</button>
+              <button type="button" class="segment ${modal.muteVoice === true ? 'active' : ''}" onclick="handlePolicyChange('muteVoice', true)">Always mute</button>
+              <button type="button" class="segment ${modal.muteVoice === false ? 'active' : ''}" onclick="handlePolicyChange('muteVoice', false)">Never mute</button>
             </div>
-          ` : `
-            <div class="settings-field">
-              <div class="settings-field-label">Trigger behaviour</div>
-              ${TRIGGER_MODES.map(mode => `
-                <button type="button" class="policy-option ${modal.triggerMode === mode.value ? 'active' : ''}"
-                        onclick="handlePolicyChange('triggerMode', ${mode.value})" style="width: 100%; text-align: left; margin-bottom: 6px;">
-                  <strong>${mode.label}</strong>
-                  <span style="display: block; font-size: 11px; color: var(--color-muted); font-weight: 400;">${mode.desc}</span>
-                </button>
-              `).join('')}
-            </div>
-
-            <label class="setting-toggle-row">
-              <div class="setting-toggle-info">
-                <span class="setting-toggle-title">Loop by default</span>
-                <span class="setting-toggle-desc">Start with repeat enabled every time this sound triggers.</span>
-              </div>
-              <span class="modern-switch">
-                <input type="checkbox" ${modal.loopByDefault ? 'checked' : ''} onchange="handlePolicyChange('loopByDefault', this.checked)">
-                <span class="switch-track"><span class="switch-thumb"></span></span>
-              </span>
-            </label>
-            <label class="setting-toggle-row">
-              <div class="setting-toggle-info">
-                <span class="setting-toggle-title">Stop other sounds</span>
-                <span class="setting-toggle-desc">Starting this sound stops every other clip.</span>
-              </div>
-              <span class="modern-switch">
-                <input type="checkbox" ${modal.stopOthers ? 'checked' : ''} onchange="handlePolicyChange('stopOthers', this.checked)">
-                <span class="switch-track"><span class="switch-thumb"></span></span>
-              </span>
-            </label>
-            <label class="setting-toggle-row">
-              <div class="setting-toggle-info">
-                <span class="setting-toggle-title">Mute other sounds</span>
-                <span class="setting-toggle-desc">Temporarily silence other clips while this one plays; their volumes return when it ends.</span>
-              </div>
-              <span class="modern-switch">
-                <input type="checkbox" ${modal.muteOthers ? 'checked' : ''} onchange="handlePolicyChange('muteOthers', this.checked)">
-                <span class="switch-track"><span class="switch-thumb"></span></span>
-              </span>
-            </label>
-
-            <div class="settings-field" style="margin-top: 10px;">
-              <div class="settings-field-label">Mute microphone while this plays</div>
-              <div class="segmented-control">
-                <button type="button" class="segment ${modal.muteVoice === null ? 'active' : ''}" onclick="handlePolicyChange('muteVoice', null)">Inherit global</button>
-                <button type="button" class="segment ${modal.muteVoice === true ? 'active' : ''}" onclick="handlePolicyChange('muteVoice', true)">Always mute</button>
-                <button type="button" class="segment ${modal.muteVoice === false ? 'active' : ''}" onclick="handlePolicyChange('muteVoice', false)">Never mute</button>
-              </div>
-            </div>
-          `}
+          </div>
 
           <div class="modal-actions" style="margin-top: 16px;">
             <button class="modal-btn cancel-btn" onclick="handleClosePoliciesModal()">Cancel</button>
@@ -8712,6 +8774,28 @@ function installPreviewDemoBindings() {
     if (!tab) return null;
     tab.sortMode = parseInt(mode, 10) || 0;
     return cloneDemoTab(tab);
+  };
+
+  //* Sidebar folder reordering: mirrors the native changeTabOrder — applies the
+  //* submitted id order (unmentioned tabs keep their relative order at the end)
+  //* and reindexes the ids positionally, exactly like Data::setTabs does.
+  window.moveTabs = async (newOrder) => {
+    const byId = new Map(demoTabs.map(t => [t.id, t]));
+    const reordered = [];
+    for (const id of (newOrder || [])) {
+      const tab = byId.get(id);
+      if (tab) {
+        reordered.push(tab);
+        byId.delete(id);
+      }
+    }
+    for (const tab of byId.values()) {
+      reordered.push(tab);
+    }
+    demoTabs.length = 0;
+    demoTabs.push(...reordered);
+    demoTabs.forEach((tab, index) => { tab.id = index; });
+    return demoTabs.map(cloneDemoTab);
   };
 
   window.moveSoundsToTab = async (soundIds, targetTabId, targetFolderId) => {

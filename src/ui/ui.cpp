@@ -1942,6 +1942,9 @@ namespace Audiopad::Objects
         Globals::gSettings.hearMyself = next;
         Globals::gConfig.save();
         applyHearMyself();
+        //* Frontend + remote mirrors: every toggle path (topbar button, settings
+        //* card, hotkey, remote panel) runs through here.
+        onHearMyselfChanged(next);
         if (Globals::gControlServer)
         {
             Globals::gControlServer->broadcastHearMyself(next);

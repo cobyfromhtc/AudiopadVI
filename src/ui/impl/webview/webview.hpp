@@ -88,6 +88,7 @@ namespace Audiopad
             void onSoundProgressed(const PlayingSound &sound) override;
             void onMicMuteChanged(bool muted) override;
             void onVoicePresetChanged(Enums::VoicePreset preset) override;
+            void onHearMyselfChanged(bool enabled) override;
             void onBoardLoopChanged(Enums::BoardLoopMode mode, std::uint32_t tabId) override;
         };
     } // namespace Objects

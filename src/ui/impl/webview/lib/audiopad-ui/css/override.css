@@ -4164,6 +4164,16 @@ body.sidebar-drag-active .sidebar-drop-zone {
 .sound-row[draggable="true"] {
   cursor: grab;
 }
+/* Drag feedback is applied via classList while the drag is live — the app
+   deliberately does not re-render mid-drag (an innerHTML swap would remove
+   the drag source and cancel the HTML5 drag session). */
+.deck-tile.dragging,
+.sound-grid-card.dragging {
+  opacity: 0.45;
+}
+.sound-row.dragging td {
+  opacity: 0.45;
+}
 .deck-tile.drag-over,
 .sound-grid-card.drag-over {
   outline: 2px dashed var(--color-accent);

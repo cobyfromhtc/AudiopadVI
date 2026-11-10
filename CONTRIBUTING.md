@@ -134,7 +134,9 @@ A high-level overview of the AudioPad repository layout:
 ```text
 audiopad/
 ├── assets/                     # Application icons, graphics, and Windows resources (.rc)
-├── deployment/                 # Packaging scripts (Inno Setup, Flatpak, AppStream metadata)
+├── deployment/                 # Packaging: Inno Setup installer (innosetup/), Debian
+│                               #   package (debian/), AppStream metadata & desktop entry
+│                               #   (appstream/, audiopad.desktop)
 ├── lib/                        # Vendored open-source libraries & submodules
 │   ├── backward-cpp/           # Stack trace and crash handling utility
 │   ├── cpp-httplib/            # Lightweight C++ HTTP/HTTPS networking client
@@ -153,22 +155,47 @@ audiopad/
 │   │   ├── enums/              # Core enumerations and error codes
 │   │   ├── global/             # Global instances and runtime singletons
 │   │   ├── hotkeys/            # OS-specific global keypress hooking (Windows/Linux)
-│   │   └── objects/            # Tab, Sound, and Settings data definitions
+│   │   └── objects/            # Tab, Sound, Folder & Settings models, manual
+│   │                           #   ordering helpers (ordering.cpp/hpp)
 │   ├── helper/                 # Utility services and background engines
-│   │   ├── audio/              # miniaudio playback, device routing, and WASAPI/Pulse/PipeWire
+│   │   ├── apps/               # Running application discovery (target window picker)
+│   │   ├── artwork/            # Image import, downscaling, and data-URL handling
+│   │   ├── audio/              # miniaudio playback engine (engine.cpp), device
+│   │   │                       #   routing, PCM ring buffer, live mic monitor
+│   │   │                       #   (mic_monitor.cpp) and WASAPI / PulseAudio /
+│   │   │                       #   PipeWire backends (windows/, linux/)
 │   │   ├── base64/             # Base64 encoding/decoding
+│   │   ├── controlserver/      # Local remote-control server: pairing, mobile
+│   │   │                       #   controller page, now-playing overlay feed
+│   │   ├── debounce_writer/    # Debounced config file writer
+│   │   ├── fswatch/            # Folder watcher for external soundboard changes
 │   │   ├── icons/              # Embedded icon handling
+│   │   ├── json/               # nlohmann::json (de)serialization bindings
 │   │   ├── misc/               # String helpers and Unicode/narrow conversions
+│   │   ├── paths/              # Cross-platform path helpers and file URI building
 │   │   ├── queue/              # Thread-safe job queue
+│   │   ├── recorder/           # System capture recorder (mic/desktop, instant
+│   │   │                       #   replay, waveform extraction, trimming)
+│   │   ├── sha1/               # SHA-1 helper for the WebSocket handshake
 │   │   ├── systeminfo/         # Host OS information
 │   │   └── version/            # Remote update and release check logic
 │   ├── ui/                     # UI abstractions, controllers, and platform bindings
+│   │   ├── ui.cpp / ui.hpp     # Window base class: playback policies, live
+│   │   │                       #   controls (mic mute, hear-myself, voice presets),
+│   │   │                       #   ordering API, recorder & board-loop orchestration
 │   │   └── impl/webview/       # Webview shell, JavaScript bridge, and UI frontend
-│   │       ├── lib/audiopad-ui/ # Frontend web assets (HTML, CSS, JS)
+│   │       ├── webview.cpp/hpp # WebView2/WebKitGTK shell: native bindings, tray,
+│   │       │                   #   overlay window, filesystem watchers
+│   │       ├── lib/audiopad-ui/ # Frontend web assets (HTML, CSS, JS — the
+│   │       │                   #   redesigned UI lives in js/override.js)
 │   │       └── lib/webviewpp/   # C++ WebView2 / WebKitGTK abstraction
 │   └── main.cpp                # Application entry point, CLI arguments, and initialization
+├── tests/                      # Regression tests & latency benchmark (ctest) —
+│                               #   playback, assets, callback budget, ordering,
+│                               #   plus benchmark_latency (see tests/README.md)
 ├── CMakeLists.txt              # Primary CMake project configuration
-└── .clang-format               # Code styling rules for clang-format
+├── FindPipeWire.cmake          # CMake lookup module for PipeWire
+└── .clang-format / .clang-tidy # Code styling & static analysis rules
 ```
 
 ---

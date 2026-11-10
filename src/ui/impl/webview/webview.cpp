@@ -951,6 +951,12 @@ namespace Audiopad::Objects
             Globals::gControlServer->broadcastVoicePreset(name);
         }
     }
+    void WebView::onHearMyselfChanged(bool enabled)
+    {
+        //* Mirrors onMicMuteChanged. The remote broadcast already happened in
+        //* Window::toggleHearMyself — this only notifies the web UI.
+        webview->callFunction<void>(Webview::JavaScriptFunction("window.onHearMyselfChanged", enabled));
+    }
     void WebView::onBoardLoopChanged(Enums::BoardLoopMode mode, std::uint32_t tabId)
     {
         webview->callFunction<void>(

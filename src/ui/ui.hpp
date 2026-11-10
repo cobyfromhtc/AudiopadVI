@@ -330,6 +330,9 @@ namespace Audiopad
             //* preset changed through hotkeys, remote clients or voice slots).
             virtual void onMicMuteChanged(bool) {}
             virtual void onVoicePresetChanged(Enums::VoicePreset) {}
+            //* "Hear myself" monitoring toggled (topbar button, settings card,
+            //* hotkey or remote client) — the frontend mirrors the new state.
+            virtual void onHearMyselfChanged(bool) {}
             //* Board-loop state changed (button cycle, skip gave up, stop-all).
             virtual void onBoardLoopChanged(Enums::BoardLoopMode, std::uint32_t) {}
         };
