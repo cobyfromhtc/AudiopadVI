@@ -1,0 +1,524 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|x64">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{E3B0C79B-81AF-31E4-B1F5-6CF1EE7A8CFB}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.28000.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>audiopad</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">audiopad.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">audiopad</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">audiopad.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">audiopad</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\MinSizeRel\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">audiopad.dir\MinSizeRel\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">audiopad</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">audiopad.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">audiopad</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</GenerateManifest>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/miniaudio" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/semver/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/fancypp/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/json/single_include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/cpp-httplib" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/packages/Microsoft.Web.WebView2/build/native/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/packages/Microsoft.Windows.ImplementationLibrary/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/webviewpp/webview/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/webviewpp/lib/json/single_include/nlohmann" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/traypp/tray/include" /external:I "C:/Program Files/OpenSSL-Win64/include"</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;WIN32_LEAN_AND_MEAN=1;AUDIOPAD_VERSION="1.1.1";WNCK_I_KNOW_THIS_IS_UNSTABLE=1;_CRT_SECURE_NO_WARNINGS=1;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1;UNICODE=1;_UNICODE=1;BACKWARD_HAS_UNWIND=1;BACKWARD_HAS_LIBUNWIND=0;BACKWARD_HAS_BACKTRACE=0;BACKWARD_HAS_BACKTRACE_SYMBOL=0;BACKWARD_HAS_DW=0;BACKWARD_HAS_BFD=0;BACKWARD_HAS_DWARF=0;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;WIN32_LEAN_AND_MEAN=1;AUDIOPAD_VERSION=\"1.1.1\";WNCK_I_KNOW_THIS_IS_UNSTABLE=1;_CRT_SECURE_NO_WARNINGS=1;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1;UNICODE=1;_UNICODE=1;BACKWARD_HAS_UNWIND=1;BACKWARD_HAS_LIBUNWIND=0;BACKWARD_HAS_BACKTRACE=0;BACKWARD_HAS_BACKTRACE_SYMBOL=0;BACKWARD_HAS_DW=0;BACKWARD_HAS_BFD=0;BACKWARD_HAS_DWARF=0;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\miniaudio;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\semver\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\fancypp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\json\single_include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\cpp-httplib;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Web.WebView2\build\native\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Windows.ImplementationLibrary\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\webview\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\lib\json\single_include\nlohmann;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\traypp\tray\include;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\miniaudio;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\semver\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\fancypp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\json\single_include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\cpp-httplib;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Web.WebView2\build\native\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Windows.ImplementationLibrary\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\webview\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\lib\json\single_include\nlohmann;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\traypp\tray\include;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PostBuildEvent>
+      <Message>Staging web UI assets beside the audiopad target</Message>
+      <Command>setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E copy_directory C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/audiopad-ui C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/Debug/dist
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PostBuildEvent>
+    <Link>
+      <AdditionalDependencies>windowscodecs.lib;ole32.lib;ws2_32.lib;dbghelp.lib;psapi.lib;src\ui\impl\webview\lib\webviewpp\Debug\webview.lib;lib\nativefiledialog-extended\src\Debug\nfd.lib;lib\tiny-process-library\Debug\tiny-process-library.lib;lib\traypp\Debug\tray.lib;lib\guardpp\Debug\guardpp.lib;Version.lib;Shlwapi.lib;packages\Microsoft.Web.WebView2\build\native\x64\WebView2LoaderStatic.lib;cryptui.lib;C:\Program Files\OpenSSL-Win64\lib\VC\x64\MTd\libssl_static.lib;C:\Program Files\OpenSSL-Win64\lib\VC\x64\MTd\libcrypto_static.lib;crypt32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <DataExecutionPrevention></DataExecutionPrevention>
+      <EnableUAC>true</EnableUAC>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
+      <ImportLibrary>C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/Debug/audiopad.lib</ImportLibrary>
+      <LinkErrorReporting></LinkErrorReporting>
+      <ProgramDataBaseFile>C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/Debug/audiopad.pdb</ProgramDataBaseFile>
+      <RandomizedBaseAddress></RandomizedBaseAddress>
+      <SubSystem>Windows</SubSystem>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
+      <UACUIAccess>false</UACUIAccess>
+      <Version>1.1</Version>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/miniaudio" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/semver/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/fancypp/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/json/single_include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/cpp-httplib" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/packages/Microsoft.Web.WebView2/build/native/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/packages/Microsoft.Windows.ImplementationLibrary/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/webviewpp/webview/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/webviewpp/lib/json/single_include/nlohmann" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/traypp/tray/include" /external:I "C:/Program Files/OpenSSL-Win64/include"</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;WIN32_LEAN_AND_MEAN=1;AUDIOPAD_VERSION="1.1.1";WNCK_I_KNOW_THIS_IS_UNSTABLE=1;_CRT_SECURE_NO_WARNINGS=1;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1;UNICODE=1;_UNICODE=1;BACKWARD_HAS_UNWIND=1;BACKWARD_HAS_LIBUNWIND=0;BACKWARD_HAS_BACKTRACE=0;BACKWARD_HAS_BACKTRACE_SYMBOL=0;BACKWARD_HAS_DW=0;BACKWARD_HAS_BFD=0;BACKWARD_HAS_DWARF=0;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;WIN32_LEAN_AND_MEAN=1;AUDIOPAD_VERSION=\"1.1.1\";WNCK_I_KNOW_THIS_IS_UNSTABLE=1;_CRT_SECURE_NO_WARNINGS=1;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1;UNICODE=1;_UNICODE=1;BACKWARD_HAS_UNWIND=1;BACKWARD_HAS_LIBUNWIND=0;BACKWARD_HAS_BACKTRACE=0;BACKWARD_HAS_BACKTRACE_SYMBOL=0;BACKWARD_HAS_DW=0;BACKWARD_HAS_BFD=0;BACKWARD_HAS_DWARF=0;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\miniaudio;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\semver\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\fancypp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\json\single_include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\cpp-httplib;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Web.WebView2\build\native\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Windows.ImplementationLibrary\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\webview\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\lib\json\single_include\nlohmann;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\traypp\tray\include;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\miniaudio;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\semver\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\fancypp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\json\single_include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\cpp-httplib;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Web.WebView2\build\native\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Windows.ImplementationLibrary\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\webview\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\lib\json\single_include\nlohmann;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\traypp\tray\include;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PostBuildEvent>
+      <Message>Staging web UI assets beside the audiopad target</Message>
+      <Command>setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E copy_directory C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/audiopad-ui C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/Release/dist
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PostBuildEvent>
+    <Link>
+      <AdditionalDependencies>windowscodecs.lib;ole32.lib;ws2_32.lib;dbghelp.lib;psapi.lib;src\ui\impl\webview\lib\webviewpp\Release\webview.lib;lib\nativefiledialog-extended\src\Release\nfd.lib;lib\tiny-process-library\Release\tiny-process-library.lib;lib\traypp\Release\tray.lib;lib\guardpp\Release\guardpp.lib;Version.lib;Shlwapi.lib;packages\Microsoft.Web.WebView2\build\native\x64\WebView2LoaderStatic.lib;cryptui.lib;C:\Program Files\OpenSSL-Win64\lib\VC\x64\MT\libssl_static.lib;C:\Program Files\OpenSSL-Win64\lib\VC\x64\MT\libcrypto_static.lib;crypt32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <DataExecutionPrevention></DataExecutionPrevention>
+      <EnableUAC>true</EnableUAC>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
+      <ImportLibrary>C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/Release/audiopad.lib</ImportLibrary>
+      <LinkErrorReporting></LinkErrorReporting>
+      <ProgramDataBaseFile>C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/Release/audiopad.pdb</ProgramDataBaseFile>
+      <RandomizedBaseAddress></RandomizedBaseAddress>
+      <SubSystem>Windows</SubSystem>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
+      <UACUIAccess>false</UACUIAccess>
+      <Version>1.1</Version>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/miniaudio" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/semver/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/fancypp/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/json/single_include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/cpp-httplib" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/packages/Microsoft.Web.WebView2/build/native/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/packages/Microsoft.Windows.ImplementationLibrary/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/webviewpp/webview/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/webviewpp/lib/json/single_include/nlohmann" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/traypp/tray/include" /external:I "C:/Program Files/OpenSSL-Win64/include"</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>MinSpace</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;WIN32_LEAN_AND_MEAN=1;AUDIOPAD_VERSION="1.1.1";WNCK_I_KNOW_THIS_IS_UNSTABLE=1;_CRT_SECURE_NO_WARNINGS=1;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1;UNICODE=1;_UNICODE=1;BACKWARD_HAS_UNWIND=1;BACKWARD_HAS_LIBUNWIND=0;BACKWARD_HAS_BACKTRACE=0;BACKWARD_HAS_BACKTRACE_SYMBOL=0;BACKWARD_HAS_DW=0;BACKWARD_HAS_BFD=0;BACKWARD_HAS_DWARF=0;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;WIN32_LEAN_AND_MEAN=1;AUDIOPAD_VERSION=\"1.1.1\";WNCK_I_KNOW_THIS_IS_UNSTABLE=1;_CRT_SECURE_NO_WARNINGS=1;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1;UNICODE=1;_UNICODE=1;BACKWARD_HAS_UNWIND=1;BACKWARD_HAS_LIBUNWIND=0;BACKWARD_HAS_BACKTRACE=0;BACKWARD_HAS_BACKTRACE_SYMBOL=0;BACKWARD_HAS_DW=0;BACKWARD_HAS_BFD=0;BACKWARD_HAS_DWARF=0;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\miniaudio;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\semver\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\fancypp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\json\single_include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\cpp-httplib;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Web.WebView2\build\native\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Windows.ImplementationLibrary\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\webview\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\lib\json\single_include\nlohmann;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\traypp\tray\include;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\miniaudio;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\semver\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\fancypp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\json\single_include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\cpp-httplib;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Web.WebView2\build\native\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Windows.ImplementationLibrary\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\webview\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\lib\json\single_include\nlohmann;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\traypp\tray\include;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PostBuildEvent>
+      <Message>Staging web UI assets beside the audiopad target</Message>
+      <Command>setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E copy_directory C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/audiopad-ui C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/MinSizeRel/dist
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PostBuildEvent>
+    <Link>
+      <AdditionalDependencies>windowscodecs.lib;ole32.lib;ws2_32.lib;dbghelp.lib;psapi.lib;src\ui\impl\webview\lib\webviewpp\MinSizeRel\webview.lib;lib\nativefiledialog-extended\src\MinSizeRel\nfd.lib;lib\tiny-process-library\MinSizeRel\tiny-process-library.lib;lib\traypp\MinSizeRel\tray.lib;lib\guardpp\MinSizeRel\guardpp.lib;Version.lib;Shlwapi.lib;packages\Microsoft.Web.WebView2\build\native\x64\WebView2LoaderStatic.lib;cryptui.lib;C:\Program Files\OpenSSL-Win64\lib\VC\x64\MT\libssl_static.lib;C:\Program Files\OpenSSL-Win64\lib\VC\x64\MT\libcrypto_static.lib;crypt32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <DataExecutionPrevention></DataExecutionPrevention>
+      <EnableUAC>true</EnableUAC>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
+      <ImportLibrary>C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/MinSizeRel/audiopad.lib</ImportLibrary>
+      <LinkErrorReporting></LinkErrorReporting>
+      <ProgramDataBaseFile>C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/MinSizeRel/audiopad.pdb</ProgramDataBaseFile>
+      <RandomizedBaseAddress></RandomizedBaseAddress>
+      <SubSystem>Windows</SubSystem>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
+      <UACUIAccess>false</UACUIAccess>
+      <Version>1.1</Version>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/miniaudio" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/semver/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/fancypp/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/json/single_include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/cpp-httplib" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/packages/Microsoft.Web.WebView2/build/native/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/packages/Microsoft.Windows.ImplementationLibrary/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/webviewpp/webview/include" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/webviewpp/lib/json/single_include/nlohmann" /external:I "C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/lib/traypp/tray/include" /external:I "C:/Program Files/OpenSSL-Win64/include"</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;WIN32_LEAN_AND_MEAN=1;AUDIOPAD_VERSION="1.1.1";WNCK_I_KNOW_THIS_IS_UNSTABLE=1;_CRT_SECURE_NO_WARNINGS=1;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1;UNICODE=1;_UNICODE=1;BACKWARD_HAS_UNWIND=1;BACKWARD_HAS_LIBUNWIND=0;BACKWARD_HAS_BACKTRACE=0;BACKWARD_HAS_BACKTRACE_SYMBOL=0;BACKWARD_HAS_DW=0;BACKWARD_HAS_BFD=0;BACKWARD_HAS_DWARF=0;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;WIN32_LEAN_AND_MEAN=1;AUDIOPAD_VERSION=\"1.1.1\";WNCK_I_KNOW_THIS_IS_UNSTABLE=1;_CRT_SECURE_NO_WARNINGS=1;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1;UNICODE=1;_UNICODE=1;BACKWARD_HAS_UNWIND=1;BACKWARD_HAS_LIBUNWIND=0;BACKWARD_HAS_BACKTRACE=0;BACKWARD_HAS_BACKTRACE_SYMBOL=0;BACKWARD_HAS_DW=0;BACKWARD_HAS_BFD=0;BACKWARD_HAS_DWARF=0;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\miniaudio;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\semver\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\fancypp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\json\single_include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\cpp-httplib;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Web.WebView2\build\native\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Windows.ImplementationLibrary\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\webview\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\lib\json\single_include\nlohmann;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\traypp\tray\include;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\backward-cpp;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\tiny-process-library;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\guardpp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\_deps\expected-src\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\lockpp\lock\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\miniaudio;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\semver\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\fancypp\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\json\single_include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\cpp-httplib;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Web.WebView2\build\native\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\packages\Microsoft.Windows.ImplementationLibrary\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\webview\include;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\lib\webviewpp\lib\json\single_include\nlohmann;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\traypp\tray\include;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PostBuildEvent>
+      <Message>Staging web UI assets beside the audiopad target</Message>
+      <Command>setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E copy_directory C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/src/ui/impl/webview/lib/audiopad-ui C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/RelWithDebInfo/dist
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PostBuildEvent>
+    <Link>
+      <AdditionalDependencies>windowscodecs.lib;ole32.lib;ws2_32.lib;dbghelp.lib;psapi.lib;src\ui\impl\webview\lib\webviewpp\RelWithDebInfo\webview.lib;lib\nativefiledialog-extended\src\RelWithDebInfo\nfd.lib;lib\tiny-process-library\RelWithDebInfo\tiny-process-library.lib;lib\traypp\RelWithDebInfo\tray.lib;lib\guardpp\RelWithDebInfo\guardpp.lib;Version.lib;Shlwapi.lib;packages\Microsoft.Web.WebView2\build\native\x64\WebView2LoaderStatic.lib;cryptui.lib;C:\Program Files\OpenSSL-Win64\lib\VC\x64\MT\libssl_static.lib;C:\Program Files\OpenSSL-Win64\lib\VC\x64\MT\libcrypto_static.lib;crypt32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <DataExecutionPrevention></DataExecutionPrevention>
+      <EnableUAC>true</EnableUAC>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
+      <ImportLibrary>C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/RelWithDebInfo/audiopad.lib</ImportLibrary>
+      <LinkErrorReporting></LinkErrorReporting>
+      <ProgramDataBaseFile>C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/RelWithDebInfo/audiopad.pdb</ProgramDataBaseFile>
+      <RandomizedBaseAddress></RandomizedBaseAddress>
+      <SubSystem>Windows</SubSystem>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
+      <UACUIAccess>false</UACUIAccess>
+      <Version>1.1</Version>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/User/Desktop/Folders/AudioPad/AudioPadV2 -BC:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build --check-stamp-file C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCCompilerABI.c;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXCompilerABI.cpp;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCompilerIdDetection.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCXXCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerABI.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerId.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerSupport.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineRCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineSystem.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeFindBinUtils.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseImplicitIncludeInfo.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseImplicitLinkInfo.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseLibraryArchitecture.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeRCCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystem.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCXXCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCompilerCommon.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestRCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckCSourceCompiles.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckIncludeFile.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckLibraryExists.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ADSP-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ARMCC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ARMClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\AppleClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Borland-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Bruce-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Clang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Clang-DetermineCompilerInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Compaq-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Compaq-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Cray-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\CrayClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Diab-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Embarcadero-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Fujitsu-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\FujitsuClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GHS-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GNU-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GNU-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\HP-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\HP-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IAR-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMCPP-C-DetermineVersionInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMCPP-CXX-DetermineVersionInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMClang-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMClang-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Intel-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IntelLLVM-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\LCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\LCC-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\NVHPC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\NVIDIA-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\OpenWatcom-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\OrangeC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\PGI-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\PathScale-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Renesas-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SCO-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SDCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SunPro-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SunPro-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TI-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TIClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Tasking-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TinyCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\VisualAge-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\VisualAge-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Watcom-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XL-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XL-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XLClang-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XLClang-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\zOS-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\zOS-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CompilerId\VS-10.vcxproj.in;C:\Program Files\CMake\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\FindPackageMessage.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\FindThreads.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCXXLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeDetermineLinkerId.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeInspectCLinker.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeInspectCXXLinker.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CheckSourceCompiles.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\FeatureTesting.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Determine-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeCCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeCXXCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeRCCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/User/Desktop/Folders/AudioPad/AudioPadV2 -BC:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build --check-stamp-file C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCCompilerABI.c;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXCompilerABI.cpp;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCompilerIdDetection.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCXXCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerABI.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerId.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerSupport.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineRCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineSystem.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeFindBinUtils.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseImplicitIncludeInfo.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseImplicitLinkInfo.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseLibraryArchitecture.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeRCCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystem.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCXXCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCompilerCommon.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestRCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckCSourceCompiles.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckIncludeFile.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckLibraryExists.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ADSP-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ARMCC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ARMClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\AppleClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Borland-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Bruce-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Clang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Clang-DetermineCompilerInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Compaq-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Compaq-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Cray-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\CrayClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Diab-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Embarcadero-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Fujitsu-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\FujitsuClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GHS-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GNU-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GNU-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\HP-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\HP-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IAR-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMCPP-C-DetermineVersionInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMCPP-CXX-DetermineVersionInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMClang-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMClang-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Intel-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IntelLLVM-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\LCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\LCC-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\NVHPC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\NVIDIA-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\OpenWatcom-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\OrangeC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\PGI-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\PathScale-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Renesas-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SCO-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SDCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SunPro-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SunPro-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TI-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TIClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Tasking-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TinyCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\VisualAge-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\VisualAge-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Watcom-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XL-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XL-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XLClang-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XLClang-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\zOS-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\zOS-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CompilerId\VS-10.vcxproj.in;C:\Program Files\CMake\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\FindPackageMessage.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\FindThreads.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCXXLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeDetermineLinkerId.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeInspectCLinker.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeInspectCXXLinker.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CheckSourceCompiles.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\FeatureTesting.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Determine-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeCCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeCXXCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeRCCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Building Custom Rule C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/User/Desktop/Folders/AudioPad/AudioPadV2 -BC:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build --check-stamp-file C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCCompilerABI.c;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXCompilerABI.cpp;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCompilerIdDetection.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCXXCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerABI.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerId.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerSupport.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineRCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineSystem.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeFindBinUtils.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseImplicitIncludeInfo.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseImplicitLinkInfo.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseLibraryArchitecture.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeRCCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystem.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCXXCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCompilerCommon.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestRCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckCSourceCompiles.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckIncludeFile.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckLibraryExists.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ADSP-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ARMCC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ARMClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\AppleClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Borland-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Bruce-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Clang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Clang-DetermineCompilerInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Compaq-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Compaq-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Cray-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\CrayClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Diab-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Embarcadero-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Fujitsu-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\FujitsuClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GHS-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GNU-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GNU-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\HP-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\HP-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IAR-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMCPP-C-DetermineVersionInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMCPP-CXX-DetermineVersionInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMClang-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMClang-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Intel-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IntelLLVM-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\LCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\LCC-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\NVHPC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\NVIDIA-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\OpenWatcom-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\OrangeC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\PGI-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\PathScale-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Renesas-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SCO-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SDCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SunPro-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SunPro-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TI-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TIClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Tasking-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TinyCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\VisualAge-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\VisualAge-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Watcom-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XL-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XL-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XLClang-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XLClang-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\zOS-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\zOS-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CompilerId\VS-10.vcxproj.in;C:\Program Files\CMake\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\FindPackageMessage.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\FindThreads.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCXXLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeDetermineLinkerId.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeInspectCLinker.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeInspectCXXLinker.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CheckSourceCompiles.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\FeatureTesting.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Determine-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeCCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeCXXCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeRCCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/User/Desktop/Folders/AudioPad/AudioPadV2 -BC:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build --check-stamp-file C:/Users/User/Desktop/Folders/AudioPad/AudioPadV2/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCCompilerABI.c;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXCompilerABI.cpp;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCXXInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeCompilerIdDetection.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCXXCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerABI.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerId.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineCompilerSupport.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineRCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeDetermineSystem.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeFindBinUtils.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseImplicitIncludeInfo.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseImplicitLinkInfo.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeParseLibraryArchitecture.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeRCCompiler.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystem.cmake.in;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCXXCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestCompilerCommon.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CMakeTestRCCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckCSourceCompiles.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckIncludeFile.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CheckLibraryExists.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ADSP-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ARMCC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\ARMClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\AppleClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Borland-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Bruce-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Clang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Clang-DetermineCompilerInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Compaq-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Compaq-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Cray-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\CrayClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Diab-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Embarcadero-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Fujitsu-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\FujitsuClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GHS-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GNU-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\GNU-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\HP-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\HP-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IAR-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMCPP-C-DetermineVersionInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMCPP-CXX-DetermineVersionInternal.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMClang-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IBMClang-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Intel-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\IntelLLVM-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\LCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\LCC-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\NVHPC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\NVIDIA-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\OpenWatcom-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\OrangeC-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\PGI-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\PathScale-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Renesas-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SCO-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SDCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SunPro-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\SunPro-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TI-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TIClang-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Tasking-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\TinyCC-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\VisualAge-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\VisualAge-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\Watcom-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XL-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XL-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XLClang-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\XLClang-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\zOS-C-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Compiler\zOS-CXX-DetermineCompiler.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\CompilerId\VS-10.vcxproj.in;C:\Program Files\CMake\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\FindPackageMessage.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\FindThreads.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCXXLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeDetermineLinkerId.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeInspectCLinker.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CMakeInspectCXXLinker.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\CheckSourceCompiles.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Internal\FeatureTesting.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Determine-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-CXX.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake;C:\Program Files\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeCCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeCXXCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeRCCompiler.cmake;C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\4.3.2\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\core\config\config.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\core\hotkeys\hotkeys.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\core\hotkeys\linux\x11.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\core\hotkeys\windows\windows.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\core\objects\data.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\core\objects\ordering.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\apps\apps.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\artwork\artwork.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\audio\audio.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\audio\engine.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\audio\linux\backend.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\audio\linux\pipewire\forward.cpp">
+      <ObjectFileName>$(IntDir)src/helper/audio/linux/pipewire/forward.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\audio\linux\pipewire\pipewire.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\audio\linux\pulseaudio\forward.cpp">
+      <ObjectFileName>$(IntDir)src/helper/audio/linux/pulseaudio/forward.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\audio\linux\pulseaudio\pulseaudio.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\audio\mic_monitor.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\audio\windows\winsound.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\base64\base64.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\controlserver\pages.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\controlserver\server.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\debounce_writer\debounce_writer.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\fswatch\fswatch.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\icons\forward.cpp">
+      <ObjectFileName>$(IntDir)src/helper/icons/forward.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\icons\icons.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\misc\misc.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\paths\paths.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\queue\queue.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\recorder\recorder.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\sha1\sha1.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\systeminfo\linux\linux-info.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\systeminfo\systeminfo.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\systeminfo\windows\windows-info.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\helper\version\check.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\main.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\impl\webview\webview.cpp" />
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\src\ui\ui.cpp" />
+    <ResourceCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\assets\icon.rc" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\ZERO_CHECK.vcxproj">
+      <Project>{B63148F1-47D3-3468-BF6E-8C36D0609906}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\lib\guardpp\guardpp.vcxproj">
+      <Project>{88D27516-F55C-359B-B4E6-2700FFF75284}</Project>
+      <Name>guardpp</Name>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\lib\nativefiledialog-extended\src\nfd.vcxproj">
+      <Project>{62E0AFBA-5B63-3A27-A678-DC37566F5670}</Project>
+      <Name>nfd</Name>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\lib\tiny-process-library\tiny-process-library.vcxproj">
+      <Project>{A3458B71-FE09-370D-A36F-4BA58C77C650}</Project>
+      <Name>tiny-process-library</Name>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\lib\traypp\tray.vcxproj">
+      <Project>{4AEB262E-0C9E-3ADC-8580-C684E7CA8AD6}</Project>
+      <Name>tray</Name>
+    </ProjectReference>
+    <ProjectReference Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\build\src\ui\impl\webview\lib\webviewpp\webview.vcxproj">
+      <Project>{625D9196-0740-386E-A434-D8654D443A2F}</Project>
+      <Name>webview</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="packages\Microsoft.Windows.ImplementationLibrary\build\native\Microsoft.Windows.ImplementationLibrary.targets" Condition="Exists('packages\Microsoft.Windows.ImplementationLibrary\build\native\Microsoft.Windows.ImplementationLibrary.targets') And ('$(Configuration)'=='Debug' Or '$(Configuration)'=='Release' Or '$(Configuration)'=='MinSizeRel' Or '$(Configuration)'=='RelWithDebInfo')" />
+  </ImportGroup>
+</Project>
