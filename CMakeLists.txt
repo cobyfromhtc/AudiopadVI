@@ -87,8 +87,8 @@ if (UNIX)
 endif()
 if (WIN32)
     target_compile_definitions(audiopad PRIVATE _CRT_SECURE_NO_WARNINGS=1 _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1 UNICODE=1 _UNICODE=1)
-    # WIC (artwork decoding/downscaling) + COM runtime
-    target_link_libraries(audiopad PRIVATE windowscodecs ole32)
+    # WIC (artwork decoding/downscaling) + COM runtime + Winsock (local control server)
+    target_link_libraries(audiopad PRIVATE windowscodecs ole32 ws2_32)
 endif()
 
 add_subdirectory(src/ui/impl/webview/lib/webviewpp EXCLUDE_FROM_ALL)

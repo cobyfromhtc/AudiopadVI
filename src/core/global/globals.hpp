@@ -1,5 +1,6 @@
 #pragma once
 #include <helper/audio/audio.hpp>
+#include <helper/audio/mic_monitor.hpp>
 #if defined(__linux__)
 #include <helper/audio/linux/backend.hpp>
 #elif defined(_WIN32)
@@ -11,8 +12,10 @@
 #include <core/objects/objects.hpp>
 #include <core/objects/settings.hpp>
 #include <guard.hpp>
+#include <helper/controlserver/server.hpp>
 #include <helper/icons/icons.hpp>
 #include <helper/queue/queue.hpp>
+#include <helper/recorder/recorder.hpp>
 
 #include <memory>
 #include <ui/ui.hpp>
@@ -37,6 +40,13 @@ namespace Audiopad
         inline std::unique_ptr<Objects::Window> gGui;
 
         inline std::shared_ptr<guardpp::guard> gGuard;
+
+        //* Local recorder (microphone / desktop capture, instant replay, trim).
+        inline Helpers::Recorder gRecorder;
+        //* Live microphone monitor with the original voice-filter presets.
+        inline std::unique_ptr<Audio::MicMonitor> gMicMonitor;
+        //* Local remote-control / automation interface (HTTP + WebSocket).
+        inline std::unique_ptr<Helpers::ControlServer> gControlServer;
 
         /* Allows for fast & easy sound access, is populated on start up */
         inline sxl::var_guard<std::map<std::uint32_t, std::reference_wrapper<Objects::Sound>>> gSounds;

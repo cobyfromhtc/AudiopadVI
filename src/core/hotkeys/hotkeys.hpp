@@ -21,6 +21,15 @@ namespace Audiopad
             std::atomic<bool> shouldPressKeys = false;
 #endif
 
+            //* Push-to-Loop sessions started from the keyboard: the triggered
+            //* sound loops until any key of its hotkey combination is released.
+            struct ActiveHold
+            {
+                std::vector<int> keys;
+                std::uint32_t soundId;
+            };
+            std::vector<ActiveHold> activeHolds;
+
           private:
             void listen();
 

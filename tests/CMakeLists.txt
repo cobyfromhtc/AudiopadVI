@@ -64,6 +64,20 @@ audiopad_add_test(test_playback)
 audiopad_add_test(test_callback_budget)
 audiopad_add_test(test_assets)
 
+# Board arrangement regression — pure model logic (manual folder ordering and
+# the whole-board loop sequence), no audio dependency.
+add_executable(test_ordering test_ordering.cpp ${CMAKE_SOURCE_DIR}/src/core/objects/ordering.cpp)
+target_compile_features(test_ordering PRIVATE cxx_std_17)
+target_include_directories(test_ordering SYSTEM PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(test_ordering PRIVATE audiopad_test_support)
+add_test(NAME test_ordering COMMAND test_ordering)
+if (NOT MSVC)
+    target_compile_options(test_ordering PRIVATE -Wall -Wextra)
+endif()
+
 # Informational harness — always exits 0, labelled for selective runs:
 #   ctest -L benchmark
 #   (see the add_test LABELS property below)

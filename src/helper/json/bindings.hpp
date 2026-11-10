@@ -61,6 +61,14 @@ namespace nlohmann
                 {"localVolume", obj.localVolume},
                 {"remoteVolume", obj.remoteVolume},
                 {"modifiedDate", obj.modifiedDate},
+                {"displayName", obj.displayName},
+                {"tags", obj.tags},
+                {"triggerMode", obj.triggerMode},
+                {"loopByDefault", obj.loopByDefault},
+                {"stopOthers", obj.stopOthers},
+                {"muteOthers", obj.muteOthers},
+                {"muteVoice", obj.muteVoice},
+                {"voicePreset", obj.voicePreset},
             };
         }
         static void from_json(const json &j, Audiopad::Objects::Sound &obj)
@@ -91,6 +99,57 @@ namespace nlohmann
                 {
                     obj.remoteVolume = j.at("remoteVolume").get<int>();
                 }
+            }
+            if (j.find("displayName") != j.end() && !j.at("displayName").is_null() && j.at("displayName").is_string())
+            {
+                obj.displayName = j.at("displayName").get<std::string>();
+            }
+            if (j.find("tags") != j.end() && j.at("tags").is_array())
+            {
+                obj.tags.clear();
+                for (const auto &tag : j.at("tags"))
+                {
+                    if (tag.is_string())
+                    {
+                        auto text = tag.get<std::string>();
+                        if (!text.empty())
+                        {
+                            obj.tags.emplace_back(std::move(text));
+                        }
+                    }
+                }
+            }
+            if (j.find("triggerMode") != j.end() && j.at("triggerMode").is_number())
+            {
+                const auto raw = j.at("triggerMode").get<std::uint8_t>();
+                if (raw <= static_cast<std::uint8_t>(Audiopad::Enums::TriggerMode::PushToLoop))
+                {
+                    obj.triggerMode = static_cast<Audiopad::Enums::TriggerMode>(raw);
+                }
+            }
+            if (j.find("loopByDefault") != j.end() && j.at("loopByDefault").is_boolean())
+            {
+                obj.loopByDefault = j.at("loopByDefault").get<bool>();
+            }
+            if (j.find("stopOthers") != j.end() && j.at("stopOthers").is_boolean())
+            {
+                obj.stopOthers = j.at("stopOthers").get<bool>();
+            }
+            if (j.find("muteOthers") != j.end() && j.at("muteOthers").is_boolean())
+            {
+                obj.muteOthers = j.at("muteOthers").get<bool>();
+            }
+            if (j.find("muteVoice") != j.end())
+            {
+                if (j.at("muteVoice").is_boolean())
+                {
+                    obj.muteVoice = j.at("muteVoice").get<bool>();
+                }
+                //* null / missing = inherit the global setting
+            }
+            if (j.find("voicePreset") != j.end() && !j.at("voicePreset").is_null() && j.at("voicePreset").is_string())
+            {
+                obj.voicePreset = j.at("voicePreset").get<std::string>();
             }
         }
     };
@@ -155,6 +214,16 @@ namespace nlohmann
                 {"useAsDefaultDevice", obj.useAsDefaultDevice},
                 {"allowMultipleOutputs", obj.allowMultipleOutputs},
                 {"targetWindow", obj.targetWindow},
+                {"hearMyself", obj.hearMyself},
+                {"overlayEnabled", obj.overlayEnabled},
+                {"overlayPosition", obj.overlayPosition},
+                {"remoteControlEnabled", obj.remoteControlEnabled},
+                {"remotePin", obj.remotePin},
+                {"remotePort", obj.remotePort},
+                {"micMuteHotkey", obj.micMuteHotkey},
+                {"hearMyselfHotkey", obj.hearMyselfHotkey},
+                {"overlayHotkey", obj.overlayHotkey},
+                {"overlayPositionHotkey", obj.overlayPositionHotkey},
             };
         }
 
@@ -220,6 +289,16 @@ namespace nlohmann
             get_to_safe(j, "muteDuringPlayback", obj.muteDuringPlayback);
             get_to_safe(j, "allowMultipleOutputs", obj.allowMultipleOutputs);
             get_to_safe(j, "targetWindow", obj.targetWindow);
+            get_to_safe(j, "hearMyself", obj.hearMyself);
+            get_to_safe(j, "overlayEnabled", obj.overlayEnabled);
+            get_to_safe(j, "overlayPosition", obj.overlayPosition);
+            get_to_safe(j, "remoteControlEnabled", obj.remoteControlEnabled);
+            get_to_safe(j, "remotePin", obj.remotePin);
+            get_to_safe(j, "remotePort", obj.remotePort);
+            get_to_safe(j, "micMuteHotkey", obj.micMuteHotkey);
+            get_to_safe(j, "hearMyselfHotkey", obj.hearMyselfHotkey);
+            get_to_safe(j, "overlayHotkey", obj.overlayHotkey);
+            get_to_safe(j, "overlayPositionHotkey", obj.overlayPositionHotkey);
         }
     };
     template <> struct adl_serializer<Audiopad::Objects::AppWindow>
@@ -262,7 +341,10 @@ namespace nlohmann
                  {"sounds", obj.sounds},
                  {"folders", obj.folders},
                  {"sortMode", obj.sortMode},
-                 {"boost", obj.boost}};
+                 {"boost", obj.boost},
+                 {"icon", obj.icon},
+                 {"soundOrder", obj.soundOrder},
+                 {"folderOrder", obj.folderOrder}};
         }
         static void from_json(const json &j, Audiopad::Objects::Tab &obj)
         {
@@ -283,6 +365,32 @@ namespace nlohmann
             if (j.find("boost") != j.end() && j.at("boost").is_number())
             {
                 j.at("boost").get_to(obj.boost);
+            }
+            if (j.find("icon") != j.end() && j.at("icon").is_string())
+            {
+                j.at("icon").get_to(obj.icon);
+            }
+            if (j.find("soundOrder") != j.end() && j.at("soundOrder").is_array())
+            {
+                obj.soundOrder.clear();
+                for (const auto &entry : j.at("soundOrder"))
+                {
+                    if (entry.is_number_unsigned())
+                    {
+                        obj.soundOrder.emplace_back(entry.get<std::uint32_t>());
+                    }
+                }
+            }
+            if (j.find("folderOrder") != j.end() && j.at("folderOrder").is_array())
+            {
+                obj.folderOrder.clear();
+                for (const auto &entry : j.at("folderOrder"))
+                {
+                    if (entry.is_number_unsigned())
+                    {
+                        obj.folderOrder.emplace_back(entry.get<std::uint32_t>());
+                    }
+                }
             }
         }
     };

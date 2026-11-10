@@ -54,6 +54,12 @@ namespace Audiopad
             std::atomic<bool> repeat = false;
             std::atomic<std::uint64_t> readInMs = 0;
 
+            //* Transient playback-policy bookkeeping (never serialized): which
+            //* policies this stream instance participates in, used by the teardown
+            //* funnel in Window::onSoundFinished to restore state.
+            bool mutedOthersBy = false;     //* temporarily silenced by another clip's "mute others"
+            bool voiceMuteRequested = false; //* this instance requested microphone muting
+
             Sound sound;
             std::uint32_t id;
 
@@ -93,6 +99,11 @@ namespace Audiopad
             //* Live volume update (0..100) for a playing stream — replaces direct
             //* masterVolumeFactor pokes on per-sound devices.
             bool setVolume(const std::uint32_t &playingId, int volumePercent);
+
+            //* Marks the stored PlayingSound with the transient playback-policy
+            //* flags so the natural-completion / stop funnel can restore state
+            //* ("mute others" victims and per-sound microphone muting).
+            void setPlayingPolicyFlags(const std::uint32_t &playingId, bool mutedByOthers, bool voiceMuteRequested);
 
             std::vector<AudioDevice> getAudioDevices();
             std::vector<Objects::PlayingSound> getPlayingSounds();

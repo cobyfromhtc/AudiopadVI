@@ -95,6 +95,14 @@ namespace Webview
         void enableContextMenu(bool state) override;
         void runCode(const std::string &code) override;
         void injectCode(const std::string &code) override;
+
+        //* --- Floating overlay support (now-playing HUD) ---
+        //* Pins the window above every other window (or releases it).
+        void setAlwaysOnTop(bool state);
+        //* Moves the window to an absolute screen position.
+        void moveTo(int x, int y);
+        //* Size of the primary monitor (overlay corner placement).
+        static std::pair<int, int> screenSize();
     };
 } // namespace Webview
 #endif

@@ -18,6 +18,11 @@ namespace Audiopad
             std::shared_ptr<Tray::Tray> tray;
             std::shared_ptr<Webview::Window> webview;
 
+            //* Floating now-playing overlay: a second, frameless, always-on-top
+            //* webview window fed by the local control server. Created lazily
+            //* while the setting is on, destroyed when it turns off.
+            std::shared_ptr<Webview::Window> overlayWindow;
+
             //* One filesystem watcher per category folder: detects sounds added from
             //* outside the app (e.g. the file explorer) in real time, rescans the tab
             //* and pushes the refreshed tab to the frontend. Declared after `webview`
@@ -49,15 +54,31 @@ namespace Audiopad
             void setupTray();
             void fetchTranslations();
 
+            //* --- Now-playing overlay management ---
+            void createOverlay();
+            void destroyOverlay();
+            void applyOverlayPosition();
+            //* Brings the overlay window in line with the current setting.
+            void syncOverlay();
+
+            //* --- Local remote-control / automation server lifecycle ---
+            void ensureControlServer();
+
+          private:
             void onAllSoundsFinished() override;
             Settings changeSettings(Settings newSettings) override;
 
           public:
+            ~WebView() override;
             void show() override;
             void setup() override;
             void mainLoop() override;
             void onSoundFinished(const PlayingSound &sound) override;
             void onHotKeyReceived(const std::vector<int> &keys) override;
+
+            bool toggleOverlay() override;
+            void setOverlayPosition(int position) override;
+            void cycleOverlayPosition() override;
 
             void onAdminRequired() override;
             void onSettingsChanged() override;
@@ -65,6 +86,9 @@ namespace Audiopad
             void onError(const Enums::ErrorCode &error) override;
             void onSoundPlayed(const PlayingSound &sound) override;
             void onSoundProgressed(const PlayingSound &sound) override;
+            void onMicMuteChanged(bool muted) override;
+            void onVoicePresetChanged(Enums::VoicePreset preset) override;
+            void onBoardLoopChanged(Enums::BoardLoopMode mode, std::uint32_t tabId) override;
         };
     } // namespace Objects
 } // namespace Audiopad

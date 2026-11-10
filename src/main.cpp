@@ -136,6 +136,19 @@ int main(int argc, char **arguments)
 
     gGui->mainLoop();
 
+    //* Tear down the auxiliary services before the audio engine goes away —
+    //* the control server's client threads may still trigger playback.
+    if (gControlServer)
+    {
+        gControlServer->stop();
+        gControlServer.reset();
+    }
+    if (gMicMonitor)
+    {
+        gMicMonitor->stop();
+        gMicMonitor.reset();
+    }
+
     gAudio.destroy();
 #if defined(__linux__)
     if (gAudioBackend)

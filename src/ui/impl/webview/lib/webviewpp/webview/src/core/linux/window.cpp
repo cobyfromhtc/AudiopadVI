@@ -276,4 +276,65 @@ void Webview::Window::onUriRequested(WebKitURISchemeRequest *request, [[maybe_un
     }
 }
 #endif
+//* --- Floating overlay support (now-playing HUD) ---
+void Webview::Window::setKeepAbove(bool state)
+{
+    gtk_window_set_keep_above(reinterpret_cast<GtkWindow *>(window), state ? TRUE : FALSE);
+}
+
+void Webview::Window::setUndecorated()
+{
+    gtk_window_set_decorated(reinterpret_cast<GtkWindow *>(window), FALSE);
+}
+
+void Webview::Window::moveTo(int x, int y)
+{
+    gtk_window_move(reinterpret_cast<GtkWindow *>(window), x, y);
+}
+
+std::pair<int, int> Webview::Window::screenSize()
+{
+    GdkDisplay *display = gdk_display_get_default();
+    if (display == nullptr)
+    {
+        return {1920, 1080};
+    }
+
+    GdkMonitor *monitor = gdk_display_get_monitor(display, 0);
+    if (monitor == nullptr)
+    {
+        return {1920, 1080};
+    }
+
+    GdkRectangle geometry{};
+    gdk_monitor_get_geometry(monitor, &geometry);
+    return {geometry.width, geometry.height};
+}
+
+void Webview::Window::startDrag()
+{
+    //* Runs on the GTK loop: grabs the current pointer position and hands the
+    //* press to the toolkit as if it happened on a titlebar.
+    runOnIdle([this] {
+        GdkWindow *gdkWindow = gtk_widget_get_window(window);
+        GdkDisplay *display = gdk_display_get_default();
+        if (gdkWindow == nullptr || display == nullptr)
+        {
+            return;
+        }
+
+        GdkSeat *seat = gdk_display_get_default_seat(display);
+        GdkDevice *pointer = seat != nullptr ? gdk_seat_get_pointer(seat) : nullptr;
+        if (pointer == nullptr)
+        {
+            return;
+        }
+
+        int x = 0;
+        int y = 0;
+        gdk_device_get_position(pointer, nullptr, &x, &y);
+        gdk_window_begin_move_drag(gdkWindow, 1, x, y, GDK_CURRENT_TIME);
+    });
+}
+
 #endif

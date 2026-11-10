@@ -453,6 +453,18 @@ namespace Audiopad::Objects
         return engine->setVolume(playingId, static_cast<float>(volumePercent));
     }
 
+    void Audio::setPlayingPolicyFlags(const std::uint32_t &playingId, bool mutedByOthers, bool voiceMuteRequested)
+    {
+        auto scoped = playingSounds.scoped();
+        auto it = scoped->find(playingId);
+        if (it == scoped->end() || !it->second)
+        {
+            return;
+        }
+        it->second->mutedOthersBy = mutedByOthers;
+        it->second->voiceMuteRequested = voiceMuteRequested;
+    }
+
     std::vector<AudioDevice> Audio::getAudioDevices()
     {
         std::string defaultName;
@@ -561,6 +573,8 @@ namespace Audiopad::Objects
         playbackDevice = other.playbackDevice;
         isRemote = other.isRemote;
         reportsProgress = other.reportsProgress;
+        mutedOthersBy = other.mutedOthersBy;
+        voiceMuteRequested = other.voiceMuteRequested;
     }
     PlayingSound &PlayingSound::operator=(const PlayingSound &other)
     {
@@ -585,6 +599,8 @@ namespace Audiopad::Objects
         playbackDevice = other.playbackDevice;
         isRemote = other.isRemote;
         reportsProgress = other.reportsProgress;
+        mutedOthersBy = other.mutedOthersBy;
+        voiceMuteRequested = other.voiceMuteRequested;
 
         return *this;
     }

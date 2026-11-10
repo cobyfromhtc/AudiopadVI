@@ -40,6 +40,28 @@ namespace Audiopad
             bool minimizeToTray = false;
             bool tabHotkeysOnly = false;
             bool deleteToTrash = true;
+
+            //* --- Live monitoring & voice slots ---
+            //* Routes the (optionally preset-processed) microphone to the local
+            //* monitor device so the user hears themselves.
+            bool hearMyself = false;
+
+            //* --- Now-Playing overlay ---
+            bool overlayEnabled = false;
+            int overlayPosition = 0; //* 0..7 — 4 corners + 4 edge midpoints
+
+            //* --- Local remote-control / automation interface ---
+            //* Serves the mobile controller page and the WebSocket control
+            //* protocol from the running desktop (PIN-protected, LAN + localhost).
+            bool remoteControlEnabled = true;
+            std::optional<std::string> remotePin; //* 6-digit pairing PIN, generated on first use
+            int remotePort = 38712;
+
+            //* --- Additional global hotkeys ---
+            std::vector<int> micMuteHotkey;           //* toggle microphone mute
+            std::vector<int> hearMyselfHotkey;        //* toggle "hear myself" monitoring
+            std::vector<int> overlayHotkey;           //* show / hide the now-playing overlay
+            std::vector<int> overlayPositionHotkey;   //* cycle the overlay position
         };
     } // namespace Objects
 } // namespace Audiopad

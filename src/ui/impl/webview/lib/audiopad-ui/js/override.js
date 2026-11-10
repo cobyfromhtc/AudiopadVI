@@ -125,8 +125,50 @@ let state = {
     pushToTalkKeys: [],
     stopHotkey: [],
     outputs: [],
-    targetWindow: null
+    targetWindow: null,
+    hearMyself: false,
+    overlayEnabled: false,
+    overlayPosition: 0,
+    remoteControlEnabled: true,
+    remotePin: null,
+    remotePort: 38712,
+    micMuteHotkey: [],
+    hearMyselfHotkey: [],
+    overlayHotkey: [],
+    overlayPositionHotkey: []
   },
+
+  //* --- Sound & board organization (V2 features) ---
+  renameSoundModal: { visible: false, soundId: null, name: '' },
+  tagsModal: { visible: false, soundId: null, value: '' },
+  policiesModal: {
+    visible: false, soundId: null,
+    triggerMode: 0, loopByDefault: false, stopOthers: false,
+    muteOthers: false, muteVoice: null, voicePreset: null, isVoiceSlot: false
+  },
+  moveModal: { visible: false, soundIds: [], targetTabId: null, targetFolderId: 0, moving: false },
+  manualDrag: { soundId: null, overSoundId: null },
+  //* Folder-tile drag & drop (reordering subfolders; `before` decides whether
+  //* the drop inserts in front of or behind the hovered tile).
+  folderDrag: { folderId: null, overFolderId: null, before: true },
+  //* Whole-board loop state mirrored from the backend (mode: 0 off /
+  //* 1 board-only / 2 board + subfolders).
+  boardLoop: { mode: 0, tabId: null, index: 0, total: 0, currentSoundId: 0 },
+
+  //* --- Recording & editing ---
+  recorderModal: {
+    visible: false, source: 0, isRecording: false, elapsedMs: 0, name: '',
+    systemAvailable: true, replayArmed: false, busy: false, lastPath: ''
+  },
+  trimModal: {
+    visible: false, soundId: null, name: '', peaks: null, durationMs: 0,
+    startMs: 0, endMs: 0, dragging: null, saving: false
+  },
+
+  //* --- Live controls / remote / overlay ---
+  micMuted: false,
+  voicePreset: 'off',
+  remoteInfo: { enabled: true, running: false, port: 38712, pin: '', address: '127.0.0.1' },
 
   //* Target Window picker state: currently open application windows.
   openWindows: [],
@@ -290,6 +332,16 @@ async function init() {
       }
     }
 
+    // Whole-board loop state (a board may still be looping from before a reload)
+    if (window.getBoardLoopState) {
+      try {
+        const raw = await window.getBoardLoopState();
+        applyBoardLoopInfo(typeof raw === 'string' ? JSON.parse(raw) : raw);
+      } catch (e) {
+        console.warn("Failed to query getBoardLoopState:", e);
+      }
+    }
+
     // Restore the sidebar category sections (names + their folders) from localStorage
     loadSidebarCategories();
     // Restore user-preferred sidebar width (resizable via the drag handle)
@@ -372,6 +424,15 @@ async function init() {
 
     // Load system theme overrides
     applyThemeStyles();
+
+    // V2 live-control state (voice preset, mic mute, remote info)
+    if (window.getVoicePreset) {
+      try { state.voicePreset = await window.getVoicePreset(); } catch (e) {}
+    }
+    if (window.isMicMuted) {
+      try { state.micMuted = await window.isMicMuted(); } catch (e) {}
+    }
+    await refreshRemoteInfo();
 
     // Listen for OS light/dark changes when theme mode is set to Follow System (0)
     if (window.matchMedia) {
@@ -618,10 +679,29 @@ function bindCppCallbacks() {
       15: "Failed to delete file",
       17: "Failed to adjust custom volume",
       18: "Invalid folder name",
-      19: "Failed to create folder"
+      19: "Failed to create folder",
+      20: "Failed to start the recording",
+      21: "Failed to save the recording",
+      22: "Failed to trim the sound",
+      23: "Failed to move the sound",
+      24: "Failed to rename the sound",
+      25: "Invalid name",
+      26: "The overlay needs Remote Control to be enabled"
     };
     const message = errorMessages[errorCode] || `Unknown error occurred (Code: ${errorCode})`;
     showToast(message, 'error');
+  };
+
+  //* Live-control events pushed by the native shell (hotkeys, voice slots,
+  //* remote clients): keep the indicator state in sync without a round-trip.
+  window.onMicMuteChanged = function(muted) {
+    state.micMuted = !!muted;
+    renderApp();
+  };
+
+  window.onVoicePresetChanged = function(presetName) {
+    state.voicePreset = presetName || 'off';
+    renderApp();
   };
 
   window.hotkeyReceived = function(hotkeySequence, keys) {
@@ -795,7 +875,14 @@ function isUiBusyForAutoRefresh() {
          (state.newFolderModal && state.newFolderModal.visible) ||
          (state.renameTabModal && state.renameTabModal.visible) ||
          (state.newSidebarFolderModal && state.newSidebarFolderModal.visible) ||
-         (state.newSidebarCategoryModal && state.newSidebarCategoryModal.visible);
+         (state.newSidebarCategoryModal && state.newSidebarCategoryModal.visible) ||
+         (state.renameSoundModal && state.renameSoundModal.visible) ||
+         (state.tagsModal && state.tagsModal.visible) ||
+         (state.policiesModal && state.policiesModal.visible) ||
+         (state.moveModal && state.moveModal.visible) ||
+         (state.recorderModal && state.recorderModal.visible) ||
+         (state.trimModal && state.trimModal.visible) ||
+         state.manualDrag.soundId !== null;
 }
 
 // Show standard clean toast warning/success indicators
@@ -2297,7 +2384,7 @@ function handleSoundContextMenu(soundId, event) {
   const mouseY = event ? event.clientY : window.innerHeight / 2;
 
   const menuWidth = 230;
-  const menuHeight = 240;
+  const menuHeight = 500;
 
   const x = (mouseX + menuWidth > window.innerWidth) ? Math.max(10, window.innerWidth - menuWidth - 10) : mouseX;
   const y = (mouseY + menuHeight > window.innerHeight) ? Math.max(10, window.innerHeight - menuHeight - 10) : mouseY;
@@ -2327,7 +2414,7 @@ function handleFolderContextMenu(tabId, event) {
   const mouseY = event ? event.clientY : window.innerHeight / 2;
 
   const menuWidth = 230;
-  const menuHeight = 275;
+  const menuHeight = 360;
 
   const x = (mouseX + menuWidth > window.innerWidth) ? Math.max(10, window.innerWidth - menuWidth - 10) : mouseX;
   const y = (mouseY + menuHeight > window.innerHeight) ? Math.max(10, window.innerHeight - menuHeight - 10) : mouseY;
@@ -2873,7 +2960,12 @@ async function changeVolume(soundId, type, val) {
 async function handleSetSortMode(tabId, mode) {
   if (window.setSortMode) {
     const parsedMode = parseInt(mode, 10);
-    state.tabs = await window.setSortMode(tabId, parsedMode);
+    //* The binding returns the single refreshed tab — merge it into the list
+    //* (assigning it wholesale used to corrupt state.tabs into an object).
+    const updatedTab = await window.setSortMode(tabId, parsedMode);
+    if (updatedTab && updatedTab.id !== undefined) {
+      state.tabs = state.tabs.map(t => t.id === updatedTab.id ? updatedTab : t);
+    }
     renderApp();
   }
 }
@@ -3211,6 +3303,14 @@ async function saveRecordedHotkey() {
     await updateSetting('stopHotkey', state.recordedKeys);
   } else if (state.recordingTarget === 'ptt') {
     await updateSetting('pushToTalkKeys', state.recordedKeys);
+  } else if (state.recordingTarget === 'micmute') {
+    await updateSetting('micMuteHotkey', state.recordedKeys);
+  } else if (state.recordingTarget === 'hearmyself') {
+    await updateSetting('hearMyselfHotkey', state.recordedKeys);
+  } else if (state.recordingTarget === 'overlay') {
+    await updateSetting('overlayHotkey', state.recordedKeys);
+  } else if (state.recordingTarget === 'overlaypos') {
+    await updateSetting('overlayPositionHotkey', state.recordedKeys);
   }
   
   cancelRecordHotkey();
@@ -3228,6 +3328,14 @@ async function clearRecordedHotkey() {
     await updateSetting('stopHotkey', []);
   } else if (state.recordingTarget === 'ptt') {
     await updateSetting('pushToTalkKeys', []);
+  } else if (state.recordingTarget === 'micmute') {
+    await updateSetting('micMuteHotkey', []);
+  } else if (state.recordingTarget === 'hearmyself') {
+    await updateSetting('hearMyselfHotkey', []);
+  } else if (state.recordingTarget === 'overlay') {
+    await updateSetting('overlayHotkey', []);
+  } else if (state.recordingTarget === 'overlaypos') {
+    await updateSetting('overlayPositionHotkey', []);
   }
   
   cancelRecordHotkey();
@@ -3259,6 +3367,1164 @@ function changeListViewMode(mode) {
 
 async function updateDefaultViewMode(mode) {
   changeListViewMode(mode);
+}
+
+// --- V2: sound & board organization, recording, live controls -------------
+
+//* Effective display name: the per-sound rename overrides the file stem.
+function soundDisplayName(sound) {
+  return (sound && sound.displayName) ? sound.displayName : (sound ? sound.name : '');
+}
+
+const TRIGGER_MODES = [
+  { value: 0, label: 'Play / Restart', desc: 'Retrigger restarts the clip from the beginning' },
+  { value: 1, label: 'Play / Pause', desc: 'Retrigger pauses, another trigger resumes' },
+  { value: 2, label: 'Play / Stop', desc: 'Retrigger stops it; the next trigger starts fresh' },
+  { value: 3, label: 'Push-to-Loop', desc: 'Loops while the key or pointer is held' }
+];
+
+const VOICE_PRESETS = [
+  { value: 'off', label: 'Off' },
+  { value: 'deep', label: 'Deep' },
+  { value: 'high', label: 'High' },
+  { value: 'echo', label: 'Echo' },
+  { value: 'robot', label: 'Robot' }
+];
+
+//* --- Rename sound (display name only — the file keeps its name) ---
+function handleOpenRenameSoundModal(soundId) {
+  closeContextMenu();
+  const sound = findSoundInTabs(soundId);
+  if (!sound) return;
+  state.renameSoundModal = { visible: true, soundId, name: soundDisplayName(sound) };
+  renderApp();
+}
+function handleCloseRenameSoundModal() {
+  state.renameSoundModal.visible = false;
+  renderApp();
+}
+function handleRenameSoundInput(val) {
+  state.renameSoundModal.name = val;
+}
+function handleRenameSoundKeydown(event) {
+  if (event.key === 'Enter') { event.preventDefault(); handleSaveRenameSound(); }
+  if (event.key === 'Escape') { event.preventDefault(); handleCloseRenameSoundModal(); }
+}
+async function handleSaveRenameSound() {
+  const modal = state.renameSoundModal;
+  if (!modal.soundId || !window.renameSound) return;
+  try {
+    const updated = await window.renameSound(modal.soundId, modal.name);
+    if (updated) {
+      for (const tab of state.tabs) {
+        const s = flattenTabSounds(tab).find(snd => snd.id === modal.soundId);
+        if (s) {
+          s.displayName = updated.displayName;
+          s.name = updated.name;
+        }
+      }
+      showToast(`Renamed to "${soundDisplayName(updated)}"`, 'success');
+    }
+  } catch (e) {
+    console.warn('renameSound failed:', e);
+  }
+  handleCloseRenameSoundModal();
+}
+
+//* --- Tags ---
+function handleOpenTagsModal(soundId) {
+  closeContextMenu();
+  const sound = findSoundInTabs(soundId);
+  if (!sound) return;
+  state.tagsModal = { visible: true, soundId, value: (sound.tags || []).join(', ') };
+  renderApp();
+}
+function handleCloseTagsModal() {
+  state.tagsModal.visible = false;
+  renderApp();
+}
+function handleTagsInput(val) {
+  state.tagsModal.value = val;
+}
+function handleTagsKeydown(event) {
+  if (event.key === 'Enter') { event.preventDefault(); handleSaveTags(); }
+  if (event.key === 'Escape') { event.preventDefault(); handleCloseTagsModal(); }
+}
+async function handleSaveTags() {
+  const modal = state.tagsModal;
+  if (!modal.soundId || !window.setSoundTags) return;
+  const tags = modal.value.split(',').map(t => t.trim()).filter(t => t.length > 0);
+  try {
+    const updated = await window.setSoundTags(modal.soundId, tags);
+    if (updated) {
+      for (const tab of state.tabs) {
+        const s = flattenTabSounds(tab).find(snd => snd.id === modal.soundId);
+        if (s) s.tags = updated.tags || [];
+      }
+      showToast('Tags saved', 'success');
+    }
+  } catch (e) {
+    console.warn('setSoundTags failed:', e);
+  }
+  handleCloseTagsModal();
+}
+
+//* --- Per-sound playback policies / voice slot ---
+function handleOpenPoliciesModal(soundId) {
+  closeContextMenu();
+  const sound = findSoundInTabs(soundId);
+  if (!sound) return;
+  state.policiesModal = {
+    visible: true,
+    soundId,
+    triggerMode: sound.triggerMode || 0,
+    loopByDefault: !!sound.loopByDefault,
+    stopOthers: !!sound.stopOthers,
+    muteOthers: !!sound.muteOthers,
+    muteVoice: sound.muteVoice === undefined ? null : sound.muteVoice,
+    voicePreset: sound.voicePreset || null,
+    isVoiceSlot: !!sound.voicePreset
+  };
+  renderApp();
+}
+function handleClosePoliciesModal() {
+  state.policiesModal.visible = false;
+  renderApp();
+}
+function handlePolicyChange(field, value) {
+  state.policiesModal[field] = value;
+  renderApp();
+}
+async function handleSavePolicies() {
+  const modal = state.policiesModal;
+  if (!modal.soundId) return;
+
+  if (modal.isVoiceSlot) {
+    if (window.setSoundVoiceSlot) {
+      try {
+        const updated = await window.setSoundVoiceSlot(modal.soundId, modal.voicePreset || 'deep');
+        if (updated) applySoundUpdateToTabs(updated);
+      } catch (e) { console.warn('setSoundVoiceSlot failed:', e); }
+    }
+  } else if (window.setSoundPolicies) {
+    try {
+      const updated = await window.setSoundPolicies(
+        modal.soundId,
+        modal.triggerMode,
+        modal.loopByDefault,
+        modal.stopOthers,
+        modal.muteOthers,
+        modal.muteVoice
+      );
+      if (updated) applySoundUpdateToTabs(updated);
+    } catch (e) { console.warn('setSoundPolicies failed:', e); }
+  }
+  showToast('Playback policies saved', 'success');
+  handleClosePoliciesModal();
+}
+function applySoundUpdateToTabs(updated) {
+  for (const tab of state.tabs) {
+    const s = flattenTabSounds(tab).find(snd => snd.id === updated.id);
+    if (s) Object.assign(s, updated);
+  }
+}
+
+//* --- Move sounds between boards ---
+function handleOpenMoveModal(soundIds) {
+  closeContextMenu();
+  const ids = Array.isArray(soundIds) ? soundIds : [soundIds];
+  if (!ids.length) return;
+  state.moveModal = {
+    visible: true,
+    soundIds: ids,
+    targetTabId: state.activeTabId,
+    targetFolderId: 0,
+    moving: false
+  };
+  renderApp();
+}
+function handleCloseMoveModal() {
+  if (state.moveModal.moving) return;
+  state.moveModal.visible = false;
+  renderApp();
+}
+function handleMoveSelectTab(tabId, folderId) {
+  state.moveModal.targetTabId = tabId;
+  state.moveModal.targetFolderId = folderId || 0;
+  renderApp();
+}
+async function handleConfirmMove() {
+  const modal = state.moveModal;
+  if (!modal.soundIds.length || modal.moving || !window.moveSoundsToTab) return;
+  modal.moving = true;
+  renderApp();
+  try {
+    const tabs = await window.moveSoundsToTab(modal.soundIds, modal.targetTabId, modal.targetFolderId);
+    if (Array.isArray(tabs)) state.tabs = tabs;
+    state.selectedSoundIds = [];
+    showToast(`Moved ${modal.soundIds.length} sound${modal.soundIds.length === 1 ? '' : 's'}`, 'success');
+  } catch (e) {
+    console.warn('moveSoundsToTab failed:', e);
+    showToast('Failed to move sounds', 'error');
+  }
+  state.moveModal.visible = false;
+  state.moveModal.moving = false;
+  renderApp();
+}
+
+//* --- Board icons ---
+async function handleAssignTabIcon(tabId) {
+  closeContextMenu();
+  let imageDataUrl = '';
+  if (window.pickImageFile) {
+    imageDataUrl = await window.pickImageFile();
+  }
+  if (!imageDataUrl && !window.pickImageFile) {
+    imageDataUrl = await new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return resolve('');
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(ev.target.result);
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    });
+  }
+  if (imageDataUrl && window.setTabIcon) {
+    imageDataUrl = await optimizeImage(imageDataUrl);
+    const updated = await window.setTabIcon(tabId, imageDataUrl);
+    if (updated) {
+      state.tabs = state.tabs.map(t => t.id === updated.id ? updated : t);
+      showToast('Board icon assigned', 'success');
+    }
+    renderApp();
+  }
+}
+async function handleRemoveTabIcon(tabId) {
+  closeContextMenu();
+  if (!window.setTabIcon) return;
+  const updated = await window.setTabIcon(tabId, "");
+  if (updated) {
+    state.tabs = state.tabs.map(t => t.id === updated.id ? updated : t);
+    showToast('Board icon removed', 'info');
+  }
+  renderApp();
+}
+
+//* --- Manual ordering (drag & drop) ---
+//* Dragging is always available: dropping in a non-manual sort mode switches
+//* the board to Manual order automatically (persisted by the backend).
+function isManualSortActive() {
+  const tab = state.tabs.find(t => t.id === state.activeTabId);
+  return !!(tab && (tab.sortMode === 4 || tab.sortMode === '4'));
+}
+function handleManualDragStart(soundId, event) {
+  state.manualDrag.soundId = soundId;
+  if (event && event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    try { event.dataTransfer.setData('text/plain', 'sound:' + soundId); } catch (e) {}
+  }
+}
+function handleManualDragOver(soundId, event) {
+  if (state.manualDrag.soundId === null) return;
+  if (event) event.preventDefault();
+  if (event && event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  if (state.manualDrag.overSoundId !== soundId) {
+    state.manualDrag.overSoundId = soundId;
+    renderApp();
+  }
+}
+function handleManualDragLeave() {
+  if (state.manualDrag.overSoundId !== null) {
+    state.manualDrag.overSoundId = null;
+    renderApp();
+  }
+}
+async function handleManualDrop(soundId, event) {
+  if (event) event.preventDefault();
+  const draggedId = state.manualDrag.soundId;
+  state.manualDrag = { soundId: null, overSoundId: null };
+  if (draggedId === null || draggedId === soundId) {
+    renderApp();
+    return;
+  }
+
+  const tab = state.tabs.find(t => t.id === state.activeTabId);
+  if (!tab || !window.setSoundOrder) return;
+
+  //* Reorder the visible list, then splice it back into the flat model order
+  //* so sounds of other folders keep their relative arrangement.
+  const visible = currentViewSounds(tab).map(s => s.id);
+  const from = visible.indexOf(draggedId);
+  const to = visible.indexOf(soundId);
+  if (from === -1 || to === -1) { renderApp(); return; }
+  visible.splice(to, 0, visible.splice(from, 1)[0]);
+
+  const visibleSet = new Set(visible);
+  let cursor = 0;
+  const flat = flattenTabSounds(tab).map(s => {
+    if (visibleSet.has(s.id)) {
+      return visible[cursor++];
+    }
+    return s.id;
+  });
+
+  const wasManual = tab.sortMode === 4 || tab.sortMode === '4';
+  try {
+    const updated = await window.setSoundOrder(tab.id, flat);
+    if (updated) {
+      state.tabs = state.tabs.map(t => t.id === updated.id ? updated : t);
+    }
+    if (!wasManual) showToast('Switched to Manual order — drag sounds to arrange them', 'info');
+  } catch (e) {
+    console.warn('setSoundOrder failed:', e);
+  }
+  renderApp();
+}
+function handleManualDragEnd() {
+  state.manualDrag = { soundId: null, overSoundId: null };
+  renderApp();
+}
+
+//* --- Subfolder ordering (drag & drop of folder tiles) ---
+function currentLevelFolders(tab) {
+  if (!tab) return [];
+  const activeFolder = getActiveFolder(tab);
+  return activeFolder ? (activeFolder.folders || []) : (tab.folders || []);
+}
+function flattenTabFolders(tab) {
+  const out = [];
+  const walk = (folders) => {
+    (folders || []).forEach(f => { out.push(f.id); walk(f.folders); });
+  };
+  walk(tab ? tab.folders : []);
+  return out;
+}
+function handleFolderDragStart(folderId, event) {
+  state.folderDrag.folderId = folderId;
+  if (event && event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    try { event.dataTransfer.setData('text/plain', 'folder:' + folderId); } catch (e) {}
+  }
+}
+function handleFolderDragOver(folderId, event) {
+  if (state.folderDrag.folderId === null) return;
+  if (event) event.preventDefault();
+  if (event && event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  //* Grid layout: the pointer half decides whether the tile lands in front of
+  //* or behind the hovered one (left/right edge highlight mirrors it).
+  let before = true;
+  if (event) {
+    const tile = event.currentTarget || (event.target && event.target.closest ? event.target.closest('.subfolder-tile') : null);
+    if (tile) {
+      const rect = tile.getBoundingClientRect();
+      before = (rect.width === 0) || ((event.clientX - rect.left) < rect.width / 2);
+    }
+  }
+  if (state.folderDrag.overFolderId !== folderId || state.folderDrag.before !== before) {
+    state.folderDrag.overFolderId = folderId;
+    state.folderDrag.before = before;
+    renderApp();
+  }
+}
+function handleFolderDragLeave() {
+  if (state.folderDrag.overFolderId !== null) {
+    state.folderDrag.overFolderId = null;
+    renderApp();
+  }
+}
+async function handleFolderDrop(folderId, event) {
+  if (event) event.preventDefault();
+  const draggedId = state.folderDrag.folderId;
+  const insertBefore = state.folderDrag.before;
+  state.folderDrag = { folderId: null, overFolderId: null, before: true };
+  if (draggedId === null || draggedId === folderId) {
+    renderApp();
+    return;
+  }
+
+  const tab = state.tabs.find(t => t.id === state.activeTabId);
+  if (!tab || !window.setFolderOrder) { renderApp(); return; }
+
+  //* Reorder the visible tile row, then splice it back into the flat folder
+  //* order so folders of other levels keep their relative arrangement.
+  const visible = currentLevelFolders(tab).map(f => f.id);
+  const from = visible.indexOf(draggedId);
+  if (from === -1 || !visible.includes(folderId)) { renderApp(); return; }
+  visible.splice(from, 1);
+  const insertAt = visible.indexOf(folderId) + (insertBefore ? 0 : 1);
+  visible.splice(insertAt, 0, draggedId);
+
+  const visibleSet = new Set(visible);
+  let cursor = 0;
+  const flat = flattenTabFolders(tab).map(id => {
+    if (visibleSet.has(id)) {
+      return visible[cursor++];
+    }
+    return id;
+  });
+
+  const wasManual = tab.sortMode === 4 || tab.sortMode === '4';
+  try {
+    const updated = await window.setFolderOrder(tab.id, flat);
+    if (updated) {
+      state.tabs = state.tabs.map(t => t.id === updated.id ? updated : t);
+    }
+    if (!wasManual) showToast('Switched to Manual order — drag folders and sounds to arrange them', 'info');
+  } catch (e) {
+    console.warn('setFolderOrder failed:', e);
+  }
+  renderApp();
+}
+function handleFolderDragEnd() {
+  state.folderDrag = { folderId: null, overFolderId: null, before: true };
+  renderApp();
+}
+
+//* --- Whole-board loop ---
+//* One button, three states: Off -> loop the board's own sounds -> loop the
+//* board AND every subfolder (board sounds first, then subfolders left to
+//* right, each subfolder's own sounds before its children) -> Off.
+async function handleBoardLoopClick(tabId) {
+  if (!window.boardLoopCycle) return;
+  try {
+    const raw = await window.boardLoopCycle(tabId);
+    const info = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    applyBoardLoopInfo(info);
+    if (!info || info.mode === 0) {
+      showToast('Board loop stopped', 'info');
+    } else if (info.total === 0 || !info.index) {
+      showToast('Nothing to loop on this board', 'error');
+    }
+  } catch (e) {
+    console.warn('boardLoopCycle failed:', e);
+  }
+}
+function applyBoardLoopInfo(info) {
+  state.boardLoop = {
+    mode: info ? (info.mode || 0) : 0,
+    tabId: info ? info.tabId : null,
+    index: info ? (info.index || 0) : 0,
+    total: info ? (info.total || 0) : 0,
+    currentSoundId: info ? (info.currentSoundId || 0) : 0
+  };
+}
+async function refreshBoardLoopState() {
+  if (!window.getBoardLoopState) return;
+  try {
+    const raw = await window.getBoardLoopState();
+    applyBoardLoopInfo(typeof raw === 'string' ? JSON.parse(raw) : raw);
+  } catch (e) {
+    console.warn('getBoardLoopState failed:', e);
+  }
+}
+window.onBoardLoopChanged = function(mode, tabId) {
+  applyBoardLoopInfo({ mode: mode, tabId: tabId, index: 0, total: 0, currentSoundId: 0 });
+  //* Pull the full snapshot (position / total) so the button badge is exact.
+  refreshBoardLoopState().then(renderApp).catch(() => renderApp());
+};
+
+//* --- Push-to-Loop (pointer side; the keyboard side is native) ---
+let ptlHoldTimers = {};
+let recorderPollTimer = null;
+function handlePTLDown(soundId, event) {
+  if (event && (event.ctrlKey || event.metaKey)) {
+    handleToggleSelectSound(soundId, event);
+    return;
+  }
+  const sound = findSoundInTabs(soundId);
+  if (sound && sound.voicePreset) {
+    handlePlaySound(soundId);
+    return;
+  }
+  clearTimeout(ptlHoldTimers[soundId]);
+  handlePlaySound(soundId);
+}
+function handlePTLUp(soundId) {
+  if (ptlHoldTimers[soundId] !== undefined) {
+    clearTimeout(ptlHoldTimers[soundId]);
+    delete ptlHoldTimers[soundId];
+  }
+  handleStopSound(soundId);
+}
+
+//* --- Recorder ---
+async function handleOpenRecorderModal() {
+  state.recorderModal.visible = true;
+  await refreshRecorderState();
+  renderApp();
+}
+function handleCloseRecorderModal() {
+  state.recorderModal.visible = false;
+  renderApp();
+}
+async function refreshRecorderState() {
+  const modal = state.recorderModal;
+  if (window.systemRecordingAvailable) {
+    try { modal.systemAvailable = await window.systemRecordingAvailable(); } catch (e) { modal.systemAvailable = false; }
+  }
+  if (window.recorderStatus) {
+    try {
+      const status = JSON.parse(await window.recorderStatus());
+      modal.isRecording = !!status.active;
+      modal.elapsedMs = status.elapsedMs || 0;
+      if (status.active) modal.source = status.source;
+    } catch (e) { modal.isRecording = false; }
+  }
+  if (window.instantReplayArmed) {
+    try { modal.replayArmed = await window.instantReplayArmed(); } catch (e) { modal.replayArmed = false; }
+  }
+}
+function handleRecorderSource(source) {
+  if (state.recorderModal.isRecording) return;
+  state.recorderModal.source = source;
+  renderApp();
+}
+function handleRecorderName(val) {
+  state.recorderModal.name = val;
+}
+async function handleToggleRecording() {
+  const modal = state.recorderModal;
+  if (modal.isRecording) {
+    if (window.recorderStop) {
+      try {
+        const path = await window.recorderStop(modal.name || null);
+        modal.lastPath = path || '';
+        if (path) showToast('Recording saved', 'success');
+        else showToast('Failed to save the recording', 'error');
+      } catch (e) { console.warn('recorderStop failed:', e); }
+    }
+    modal.isRecording = false;
+    renderApp();
+    return;
+  }
+  if (modal.source === 1 && !modal.systemAvailable) return;
+  if (window.recorderStart) {
+    try {
+      modal.isRecording = await window.recorderStart(modal.source, null);
+      if (!modal.isRecording) showToast('Could not open the capture device', 'error');
+    } catch (e) {
+      modal.isRecording = false;
+      showToast('Recording failed to start', 'error');
+    }
+  }
+  renderApp();
+}
+async function handleToggleInstantReplay() {
+  if (window.armInstantReplay && window.disarmInstantReplay) {
+    if (state.recorderModal.replayArmed) {
+      await window.disarmInstantReplay();
+      state.recorderModal.replayArmed = false;
+      showToast('Instant Replay disarmed', 'info');
+    } else {
+      const ok = await window.armInstantReplay();
+      state.recorderModal.replayArmed = !!ok;
+      showToast(ok ? 'Instant Replay armed — last 30s are kept rolling' : 'System capture is not available', ok ? 'success' : 'error');
+    }
+    renderApp();
+  }
+}
+async function handleSaveInstantReplay() {
+  if (!window.saveInstantReplay) return;
+  try {
+    const path = await window.saveInstantReplay(state.recorderModal.name || null);
+    if (path) {
+      state.recorderModal.lastPath = path;
+      showToast('Instant Replay saved', 'success');
+    } else {
+      showToast('Nothing captured yet', 'info');
+    }
+  } catch (e) {
+    console.warn('saveInstantReplay failed:', e);
+  }
+  renderApp();
+}
+async function handleAddLastRecordingToBoard() {
+  const modal = state.recorderModal;
+  const tab = state.tabs.find(t => t.id === state.activeTabId);
+  if (!modal.lastPath || !tab || !window.importFileIntoTab) return;
+  modal.busy = true;
+  renderApp();
+  try {
+    let folderId = 0;
+    if (state.currentView === 'folder') {
+      const folder = getActiveFolder(tab);
+      folderId = folder ? folder.id : 0;
+    }
+    const updated = await window.importFileIntoTab(tab.id, modal.lastPath, folderId);
+    if (updated) {
+      state.tabs = state.tabs.map(t => t.id === updated.id ? updated : t);
+      showToast(`Added to "${tab.name}"`, 'success');
+    }
+  } catch (e) {
+    console.warn('importFileIntoTab failed:', e);
+    showToast('Failed to add the recording', 'error');
+  }
+  modal.busy = false;
+  renderApp();
+}
+
+//* --- Trim / edit ---
+async function handleOpenTrimModal(soundId) {
+  closeContextMenu();
+  const sound = findSoundInTabs(soundId);
+  if (!sound || sound.voicePreset) return;
+  state.trimModal = {
+    visible: true, soundId, name: soundDisplayName(sound),
+    peaks: null, durationMs: 0, startMs: 0, endMs: 0, dragging: null, saving: false
+  };
+  renderApp();
+  if (window.getSoundWaveform) {
+    try {
+      const payload = JSON.parse(await window.getSoundWaveform(soundId, 480));
+      state.trimModal.peaks = payload.peaks || [];
+      state.trimModal.durationMs = payload.durationMs || 0;
+      state.trimModal.endMs = state.trimModal.durationMs;
+      renderApp();
+    } catch (e) {
+      console.warn('getSoundWaveform failed:', e);
+      showToast('Could not read the audio file', 'error');
+    }
+  }
+}
+function handleCloseTrimModal() {
+  state.trimModal.visible = false;
+  renderApp();
+}
+function trimPositionFromEvent(event) {
+  const canvas = document.getElementById('trim-waveform');
+  if (!canvas) return 0;
+  const rect = canvas.getBoundingClientRect();
+  const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+  return Math.round(ratio * state.trimModal.durationMs);
+}
+function handleTrimPointerDown(which, event) {
+  event.preventDefault();
+  event.stopPropagation();
+  state.trimModal.dragging = which;
+  const position = trimPositionFromEvent(event);
+  if (which === 'start') {
+    state.trimModal.startMs = Math.min(position, state.trimModal.endMs - 50);
+  } else if (which === 'end') {
+    state.trimModal.endMs = Math.max(position, state.trimModal.startMs + 50);
+  } else {
+    state.trimModal.startMs = Math.min(position, state.trimModal.durationMs - 50);
+    state.trimModal.endMs = Math.max(state.trimModal.startMs + 50, Math.min(position + 50, state.trimModal.durationMs));
+  }
+  renderApp();
+}
+function handleTrimPointerMove(event) {
+  if (!state.trimModal.dragging) return;
+  const position = trimPositionFromEvent(event);
+  const which = state.trimModal.dragging;
+  if (which === 'start') {
+    state.trimModal.startMs = Math.min(Math.max(0, position), state.trimModal.endMs - 50);
+  } else if (which === 'end') {
+    state.trimModal.endMs = Math.max(Math.min(state.trimModal.durationMs, position), state.trimModal.startMs + 50);
+  }
+  const canvas = document.getElementById('trim-waveform');
+  if (canvas) drawTrimWaveform(canvas);
+  updateTrimLabels();
+}
+function handleTrimPointerUp() {
+  if (state.trimModal.dragging) {
+    state.trimModal.dragging = null;
+    renderApp();
+  }
+}
+function updateTrimLabels() {
+  const startEl = document.getElementById('trim-start-label');
+  const endEl = document.getElementById('trim-end-label');
+  const lengthEl = document.getElementById('trim-length-label');
+  if (startEl) startEl.textContent = formatDuration(state.trimModal.startMs);
+  if (endEl) endEl.textContent = formatDuration(state.trimModal.endMs);
+  if (lengthEl) lengthEl.textContent = formatDuration(Math.max(0, state.trimModal.endMs - state.trimModal.startMs));
+}
+function drawTrimWaveform(canvas) {
+  const modal = state.trimModal;
+  if (!canvas || !modal.peaks || !modal.peaks.length) return;
+  const context = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  const isDark = document.body.classList.contains('dark-theme');
+  const styles = getComputedStyle(document.body);
+  const accent = styles.getPropertyValue('--color-accent').trim() || '#e8a33d';
+  const muted = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)';
+  const dim = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
+
+  context.clearRect(0, 0, width, height);
+
+  const buckets = modal.peaks.length / 2;
+  const barWidth = width / buckets;
+  const startRatio = modal.durationMs > 0 ? modal.startMs / modal.durationMs : 0;
+  const endRatio = modal.durationMs > 0 ? modal.endMs / modal.durationMs : 1;
+
+  for (let bucket = 0; bucket < buckets; bucket++) {
+    const min = modal.peaks[bucket * 2];
+    const max = modal.peaks[bucket * 2 + 1];
+    const ratio = bucket / buckets;
+    const inSelection = ratio >= startRatio && ratio <= endRatio;
+    context.fillStyle = inSelection ? accent : muted;
+
+    const yTop = height / 2 - Math.max(1, max * (height / 2 - 4));
+    const yBottom = height / 2 + Math.max(1, -min * (height / 2 - 4));
+    context.fillRect(bucket * barWidth, yTop, Math.max(1, barWidth - 0.5), yBottom - yTop);
+  }
+
+  //* Selection edges
+  context.fillStyle = dim;
+  context.fillRect(0, 0, startRatio * width, height);
+  context.fillRect(endRatio * width, 0, width - endRatio * width, height);
+  context.fillStyle = accent;
+  context.fillRect(Math.max(0, startRatio * width - 1.5), 0, 3, height);
+  context.fillRect(Math.min(width - 3, endRatio * width - 1.5), 0, 3, height);
+}
+async function handleTrimPreview() {
+  const modal = state.trimModal;
+  if (!modal.soundId) return;
+  const duration = Math.max(100, modal.endMs - modal.startMs);
+  const playing = await handlePlaySound(modal.soundId);
+  if (playing && window.seekSound) {
+    try { await window.seekSound(modal.soundId, modal.startMs); } catch (e) {}
+    clearTimeout(ptlHoldTimers['trim-preview']);
+    ptlHoldTimers['trim-preview'] = setTimeout(() => {
+      handleStopSound(modal.soundId);
+      delete ptlHoldTimers['trim-preview'];
+    }, duration);
+  }
+}
+async function handleTrimSave() {
+  const modal = state.trimModal;
+  if (!modal.soundId || modal.saving || !window.trimSound) return;
+  modal.saving = true;
+  renderApp();
+  try {
+    const created = await window.trimSound(modal.soundId, modal.startMs, modal.endMs);
+    if (created) {
+      const tab = state.tabs.find(t => t.id === state.activeTabId);
+      if (tab && window.getTabs) {
+        state.tabs = await window.getTabs();
+      }
+      showToast(`Saved "${soundDisplayName(created)}"`, 'success');
+    } else {
+      showToast('Trim failed', 'error');
+    }
+  } catch (e) {
+    console.warn('trimSound failed:', e);
+    showToast('Trim failed', 'error');
+  }
+  modal.saving = false;
+  handleCloseTrimModal();
+}
+
+//* --- Live controls (mic, monitoring, voice presets) ---
+async function handleToggleMicMute() {
+  if (!window.toggleMicMute) return;
+  try {
+    state.micMuted = await window.toggleMicMute();
+    renderApp();
+  } catch (e) { console.warn('toggleMicMute failed:', e); }
+}
+async function handleToggleHearMyself() {
+  if (!window.toggleHearMyself) return;
+  try {
+    await window.toggleHearMyself(); // settings arrive via the settings event
+  } catch (e) { console.warn('toggleHearMyself failed:', e); }
+}
+async function handleSelectVoicePreset(preset) {
+  if (!window.setVoicePreset) return;
+  try {
+    const ok = await window.setVoicePreset(preset);
+    if (!ok) showToast('Unknown voice preset', 'error');
+  } catch (e) { console.warn('setVoicePreset failed:', e); }
+}
+
+//* --- Overlay & remote panel helpers ---
+async function handleSetOverlayPosition(position) {
+  state.settings.overlayPosition = position;
+  if (window.setOverlayPosition) {
+    try { await window.setOverlayPosition(position); } catch (e) { console.warn('setOverlayPosition failed:', e); }
+  }
+  renderApp();
+}
+
+async function handleToggleOverlaySetting() {
+  if (window.toggleOverlay) {
+    try {
+      state.settings.overlayEnabled = await window.toggleOverlay();
+    } catch (e) {
+      console.warn('toggleOverlay failed:', e);
+    }
+  }
+  renderApp();
+}
+
+//* --- Remote control panel ---
+async function refreshRemoteInfo() {
+  if (!window.getRemoteInfo) return;
+  try {
+    state.remoteInfo = JSON.parse(await window.getRemoteInfo());
+  } catch (e) { console.warn('getRemoteInfo failed:', e); }
+}
+function remoteControllerUrl() {
+  const info = state.remoteInfo;
+  return `http://${info.address}:${info.port}/`;
+}
+async function handleCopyRemoteUrl() {
+  const url = remoteControllerUrl();
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast('Controller address copied', 'success');
+  } catch (e) {
+    showToast(url, 'info');
+  }
+}
+async function handleRegeneratePin() {
+  if (!window.regenerateRemotePin) return;
+  try {
+    await window.regenerateRemotePin();
+    await refreshRemoteInfo();
+    showToast('New pairing PIN generated', 'success');
+    renderApp();
+  } catch (e) { console.warn('regenerateRemotePin failed:', e); }
+}
+
+//* --- Overlay position picker labels ---
+const OVERLAY_POSITIONS = [
+  'Top Left', 'Top Center', 'Top Right', 'Right Center',
+  'Bottom Right', 'Bottom Center', 'Bottom Left', 'Left Center'
+];
+
+//* --- Minimal QR encoder (byte mode, versions 1-5, ECC level M) -------------
+//* Self-contained: draws the pairing URL into the settings canvas. Byte-mode
+//* only, single/dual RS block structures — exactly what short URLs need.
+const QR = (() => {
+  // Reed-Solomon block tables per version (level M): [eccPerBlock, [dataCodewords per block]]
+  const BLOCKS = {
+    1: [10, [16]],
+    2: [16, [28]],
+    3: [26, [44]],
+    4: [18, [32, 32]],
+    5: [24, [43, 43]]
+  };
+  const ALIGN = { 1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30] };
+
+  const gfExp = new Array(512);
+  const gfLog = new Array(256);
+  (() => {
+    let x = 1;
+    for (let i = 0; i < 255; i++) {
+      gfExp[i] = x;
+      gfLog[x] = i;
+      x <<= 1;
+      if (x & 0x100) x ^= 0x11d;
+    }
+    for (let i = 255; i < 512; i++) gfExp[i] = gfExp[i - 255];
+  })();
+  const gfMul = (a, b) => (a === 0 || b === 0) ? 0 : gfExp[gfLog[a] + gfLog[b]];
+
+  function rsGenerator(degree) {
+    let poly = [1];
+    for (let i = 0; i < degree; i++) {
+      const next = new Array(poly.length + 1).fill(0);
+      for (let j = 0; j < poly.length; j++) {
+        next[j] ^= gfMul(poly[j], 1);
+        next[j + 1] ^= gfMul(poly[j], gfExp[i]);
+      }
+      poly = next;
+    }
+    return poly;
+  }
+
+  function rsEncode(data, eccLength) {
+    const generator = rsGenerator(eccLength);
+    const remainder = new Array(eccLength).fill(0);
+    for (const byte of data) {
+      const factor = byte ^ remainder[0];
+      remainder.shift();
+      remainder.push(0);
+      if (factor !== 0) {
+        for (let i = 0; i < eccLength; i++) {
+          remainder[i] ^= gfMul(generator[i + 1], factor);
+        }
+      }
+    }
+    return remainder;
+  }
+
+  function buildMatrix(text) {
+    const bytes = [];
+    for (let i = 0; i < text.length; i++) bytes.push(text.charCodeAt(i) & 0xff);
+    if (bytes.length > 43) return null;
+
+    let version = 1;
+    while (version < 5 && BLOCKS[version][1].reduce((a, b) => a + b, 0) < bytes.length + 2) version++;
+    const [eccPerBlock, dataBlocks] = BLOCKS[version];
+    const dataCodewords = dataBlocks.reduce((a, b) => a + b, 0);
+    if (bytes.length + 2 > dataCodewords) return null;
+
+    const size = 17 + 4 * version;
+    const modules = Array.from({ length: size }, () => new Array(size).fill(null));
+    const reserved = Array.from({ length: size }, () => new Array(size).fill(false));
+
+    const setModule = (row, col, value) => {
+      if (row < 0 || col < 0 || row >= size || col >= size) return;
+      modules[row][col] = value;
+      reserved[row][col] = true;
+    };
+
+    // Finder patterns + separators
+    const drawFinder = (row, col) => {
+      for (let r = -1; r <= 7; r++) {
+        for (let c = -1; c <= 7; c++) {
+          const rr = row + r, cc = col + c;
+          if (rr < 0 || cc < 0 || rr >= size || cc >= size) continue;
+          const inRing = r >= 0 && r <= 6 && c >= 0 && c <= 6 &&
+            (r === 0 || r === 6 || c === 0 || c === 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4));
+          setModule(rr, cc, inRing);
+        }
+      }
+    };
+    drawFinder(0, 0);
+    drawFinder(0, size - 7);
+    drawFinder(size - 7, 0);
+
+    // Timing patterns
+    for (let i = 8; i < size - 8; i++) {
+      setModule(6, i, i % 2 === 0);
+      setModule(i, 6, i % 2 === 0);
+    }
+
+    // Alignment patterns (skipping finder corners)
+    const centers = ALIGN[version];
+    for (const r of centers) {
+      for (const c of centers) {
+        if ((r <= 8 && c <= 8) || (r <= 8 && c >= size - 9) || (r >= size - 9 && c <= 8)) continue;
+        for (let dr = -2; dr <= 2; dr++) {
+          for (let dc = -2; dc <= 2; dc++) {
+            setModule(r + dr, c + dc, Math.max(Math.abs(dr), Math.abs(dc)) !== 1);
+          }
+        }
+      }
+    }
+
+    // Format info areas (values filled after mask choice)
+    for (let i = 0; i < 9; i++) {
+      if (i !== 6) { reserved[8][i] = true; reserved[i][8] = true; }
+    }
+    for (let i = 0; i < 8; i++) {
+      reserved[8][size - 1 - i] = true;
+      reserved[size - 1 - i][8] = true;
+    }
+    // Dark module
+    setModule(size - 8, 8, true);
+
+    // --- data bit stream ---
+    const bits = [];
+    const pushBits = (value, count) => {
+      for (let i = count - 1; i >= 0; i--) bits.push((value >> i) & 1);
+    };
+    pushBits(4, 4);            // byte mode
+    pushBits(bytes.length, 8); // v1-9 char count
+    for (const byte of bytes) pushBits(byte, 8);
+    const capacityBits = dataCodewords * 8;
+    pushBits(0, Math.min(4, capacityBits - bits.length)); // terminator
+    while (bits.length % 8 !== 0) bits.push(0);
+    const padBytes = [0xec, 0x11];
+    let padIndex = 0;
+    while (bits.length < capacityBits) {
+      pushBits(padBytes[padIndex % 2], 8);
+      padIndex++;
+    }
+    const dataBytes = [];
+    for (let i = 0; i < bits.length; i += 8) {
+      let value = 0;
+      for (let j = 0; j < 8; j++) value = (value << 1) | bits[i + j];
+      dataBytes.push(value);
+    }
+
+    // --- RS blocks + interleave ---
+    const finalBytes = [];
+    const eccBytes = [];
+    let offset = 0;
+    for (const blockLength of dataBlocks) {
+      const block = dataBytes.slice(offset, offset + blockLength);
+      offset += blockLength;
+      finalBytes.push(block);
+      eccBytes.push(rsEncode(block, eccPerBlock));
+    }
+    const interleaved = [];
+    const maxBlock = Math.max(...dataBlocks);
+    for (let i = 0; i < maxBlock; i++) {
+      for (const block of finalBytes) if (i < block.length) interleaved.push(block[i]);
+    }
+    for (let i = 0; i < eccPerBlock; i++) {
+      for (const ecc of eccBytes) interleaved.push(ecc[i]);
+    }
+
+    // --- place data with a given mask ---
+    const maskFunctions = [
+      (r, c) => (r + c) % 2 === 0,
+      (r, c) => r % 2 === 0,
+      (r, c) => c % 3 === 0,
+      (r, c) => (r + c) % 3 === 0,
+      (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+      (r, c) => (r * c) % 2 + (r * c) % 3 === 0,
+      (r, c) => ((r * c) % 2 + (r * c) % 3) % 2 === 0,
+      (r, c) => ((r * c) % 3 + (r + c) % 2) % 2 === 0
+    ];
+
+    const placeData = (mask) => {
+      let bitIndex = 0;
+      const totalBits = interleaved.length * 8;
+      let column = size - 1;
+      let upward = true;
+      while (column > 0) {
+        if (column === 6) column--; // timing column
+        for (let i = 0; i < size; i++) {
+          const row = upward ? size - 1 - i : i;
+          for (let dc = 0; dc < 2; dc++) {
+            const col = column - dc;
+            if (reserved[row][col]) continue;
+            let bit = false;
+            if (bitIndex < totalBits) {
+              bit = ((interleaved[bitIndex >> 3] >> (7 - (bitIndex & 7))) & 1) === 1;
+            }
+            if (maskFunctions[mask](row, col)) bit = !bit;
+            modules[row][col] = bit;
+            bitIndex++;
+          }
+        }
+        upward = !upward;
+        column -= 2;
+      }
+    };
+
+    const formatBits = (mask) => {
+      // Level M (00) + mask in the 5 data bits, BCH(15,5) remainder appended,
+      // the whole 15-bit word XORed with the static mask 0x5412.
+      const data = mask << 10;
+      let value = data;
+      for (let i = 4; i >= 0; i--) {
+        if ((value >> (i + 10)) & 1) value ^= 0x537 << i;
+      }
+      return ((data | (value & 0x3ff)) ^ 0x5412) & 0x7fff;
+    };
+
+    const placeFormat = (bits) => {
+      // Format string read MSB-first (verified against the reference encoder):
+      // copy 1 wraps the top-left finder, copy 2 runs up column 8 and along row 8.
+      const positions1 = [[8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[8,7],[8,8],[7,8],[5,8],[4,8],[3,8],[2,8],[1,8],[0,8]];
+      for (let i = 0; i < 15; i++) {
+        const [r, c] = positions1[i];
+        modules[r][c] = ((bits >> (14 - i)) & 1) === 1;
+      }
+      for (let i = 0; i < 7; i++) modules[size - 1 - i][8] = ((bits >> (14 - i)) & 1) === 1;
+      for (let i = 0; i < 8; i++) modules[8][size - 8 + i] = ((bits >> (7 - i)) & 1) === 1;
+      modules[size - 8][8] = true; // dark module
+    };
+
+    const penalty = () => {
+      let score = 0;
+      // Rule 1: runs of 5+
+      for (let row = 0; row < size; row++) {
+        let run = 1;
+        for (let col = 1; col < size; col++) {
+          if (modules[row][col] === modules[row][col - 1]) run++;
+          else { if (run >= 5) score += 3 + (run - 5); run = 1; }
+        }
+        if (run >= 5) score += 3 + (run - 5);
+      }
+      for (let col = 0; col < size; col++) {
+        let run = 1;
+        for (let row = 1; row < size; row++) {
+          if (modules[row][col] === modules[row - 1][col]) run++;
+          else { if (run >= 5) score += 3 + (run - 5); run = 1; }
+        }
+        if (run >= 5) score += 3 + (run - 5);
+      }
+      // Rule 2: 2x2 blocks
+      for (let row = 0; row < size - 1; row++) {
+        for (let col = 0; col < size - 1; col++) {
+          const v = modules[row][col];
+          if (v === modules[row][col + 1] && v === modules[row + 1][col] && v === modules[row + 1][col + 1]) score += 3;
+        }
+      }
+      // Rule 3: 11-module windows shaped like 00001011101 or 10111010000
+      // (a finder-like run with four light modules on one side), fully inside
+      // the symbol — matching the reference scoring.
+      const finderWindow = (getWindow) => {
+        let points = 0;
+        for (let index = 0; index < 11; index++) {
+          if (getWindow(index) === null) return 0;
+        }
+        let value = 0;
+        for (let index = 0; index < 11; index++) {
+          value = ((value << 1) | (getWindow(index) ? 1 : 0)) & 0x7ff;
+        }
+        if (value === 0x5d0 || value === 0x05d) points++;
+        return points;
+      };
+      for (let a = 0; a < size; a++) {
+        for (let b = 0; b + 10 < size; b++) {
+          score += 40 * finderWindow((k) => modules[a][b + k] !== undefined && b + k < size ? modules[a][b + k] : null);
+          score += 40 * finderWindow((k) => modules[b + k] !== undefined && b + k < size ? modules[b + k][a] : null);
+        }
+      }
+      // Rule 4: dark/light balance
+      let dark = 0;
+      for (let row = 0; row < size; row++) for (let col = 0; col < size; col++) if (modules[row][col]) dark++;
+      const percent = (dark * 100) / (size * size);
+      score += Math.floor(Math.abs(percent - 50) / 5) * 10;
+      return score;
+    };
+
+    let bestMask = 0;
+    let bestScore = Infinity;
+    for (let mask = 0; mask < 8; mask++) {
+      placeData(mask);
+      placeFormat(formatBits(mask));
+      const score = penalty();
+      if (score < bestScore) { bestScore = score; bestMask = mask; }
+    }
+    placeData(bestMask);
+    placeFormat(formatBits(bestMask));
+
+    return { size, modules };
+  }
+
+  function draw(canvas, text, dark, light) {
+    const matrix = buildMatrix(text);
+    if (!matrix || !canvas) return false;
+    const context = canvas.getContext('2d');
+    const quiet = 4;
+    const cell = Math.floor(Math.min(canvas.width, canvas.height) / (matrix.size + quiet * 2));
+    const offset = Math.floor((canvas.width - cell * matrix.size) / 2);
+    context.fillStyle = light || '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = dark || '#10131a';
+    for (let row = 0; row < matrix.size; row++) {
+      for (let col = 0; col < matrix.size; col++) {
+        if (matrix.modules[row][col]) {
+          context.fillRect(offset + col * cell, offset + row * cell, cell, cell);
+        }
+      }
+    }
+    return true;
+  }
+
+  return { draw, buildMatrix };
+})();
+
+function drawRemoteQr() {
+  const canvas = document.getElementById('remote-qr');
+  if (canvas) {
+    QR.draw(canvas, remoteControllerUrl());
+  }
 }
 
 // --- Templates Rendering ---
@@ -3399,7 +4665,7 @@ function renderSidebarTabItem(t) {
          ondragleave="handleSidebarTabDragLeave(event)"
          ondrop="handleSidebarTabDrop(${t.id}, event)">
       <div class="folder-name-container">
-        <span class="nav-icon">${isActive ? icons.folderOpen : icons.folder}</span>
+        ${t.icon ? `<img class="nav-icon board-icon-img" src="${t.icon}" alt="" onerror="this.outerHTML='<span class=\\'nav-icon\\'>${isActive ? icons.folderOpen : icons.folder}</span>'">` : `<span class="nav-icon">${isActive ? icons.folderOpen : icons.folder}</span>`}
         <span title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</span>
       </div>
       ${boost > 100 ? `<span class="boost-badge" title="Sound boost active: ${boost}%">${icons.boltSmall}${boost}%</span>` : ''}
@@ -3652,6 +4918,28 @@ function renderAppTopbar() {
         <span class="sidebar-logo">${icons.logo}</span>
         <span class="logo-text">AudioPad</span>
       </div>
+
+      <div class="topbar-live-controls">
+        <button class="topbar-live-btn ${state.micMuted ? 'danger' : ''}" title="${state.micMuted ? 'Unmute microphone' : 'Mute microphone'}"
+                onclick="handleToggleMicMute()">
+          <span class="live-mic-icon ${state.micMuted ? 'muted' : ''}">🎤</span>
+          <span class="topbar-live-label">${state.micMuted ? 'Mic off' : 'Mic on'}</span>
+        </button>
+        <button class="topbar-live-btn ${state.settings.hearMyself ? 'active' : ''}" title="Hear myself — monitor the (voice-processed) microphone locally"
+                onclick="handleToggleHearMyself()">
+          <span>🎧</span>
+          <span class="topbar-live-label">Monitor</span>
+        </button>
+        ${state.voicePreset && state.voicePreset !== 'off' ? `
+          <span class="topbar-voice-pill" title="Live voice preset — change it in Settings or via voice slots">🎙 ${state.voicePreset}</span>
+        ` : ''}
+        <button class="topbar-live-btn" title="Recorder — microphone & desktop capture, instant replay, trim"
+                onclick="handleOpenRecorderModal()">
+          <span class="live-rec-dot">●</span>
+          <span class="topbar-live-label">Record</span>
+        </button>
+      </div>
+
       <div class="topbar-drag-hint" ${interactive ? '' : 'style="display: none;"'}></div>
       ${interactive ? `
         <div class="topbar-controls">
@@ -4007,6 +5295,32 @@ function renderApp() {
     }
   }
 
+  //* V2: paint the trim waveform canvas once it exists, and keep the
+  //* recording timer ticking while the recorder modal is open.
+  if (state.trimModal && state.trimModal.visible) {
+    const canvas = document.getElementById('trim-waveform');
+    if (canvas) drawTrimWaveform(canvas);
+  }
+  if (state.currentView === 'settings' && state.remoteInfo.running) {
+    drawRemoteQr();
+  }
+  if (state.recorderModal && state.recorderModal.visible && state.recorderModal.isRecording) {
+    if (!recorderPollTimer) {
+      recorderPollTimer = setInterval(async () => {
+        await refreshRecorderState();
+        const timerEl = document.getElementById('recorder-elapsed');
+        if (timerEl) {
+          timerEl.textContent = (state.recorderModal.elapsedMs / 1000).toFixed(1);
+        } else if (state.recorderModal.isRecording) {
+          renderApp();
+        }
+      }, 250);
+    }
+  } else if (recorderPollTimer) {
+    clearInterval(recorderPollTimer);
+    recorderPollTimer = null;
+  }
+
   // First-run onboarding: starts the tour overlay once the real workspace is
   // on screen (this line is unreachable for the VB-Cable setup page).
   maybeStartOnboarding();
@@ -4061,13 +5375,26 @@ function renderFolderNavigation(activeTab, activeFolder, isSearching) {
   if (childFolders.length > 0) {
     tilesHtml = `
       <div class="subfolder-tiles">
-        ${childFolders.map(f => `
-          <button class="subfolder-tile" data-drop-folder-id="${f.id}" onclick="navigateToFolder(${f.id})" title="${escapeHtml(f.path || f.name)} — ${countFolderSounds(f)} sound${countFolderSounds(f) === 1 ? '' : 's'}">
+        ${childFolders.map(f => {
+          const dragState = state.folderDrag;
+          const tileClasses = ['subfolder-tile'];
+          if (dragState.folderId === f.id) tileClasses.push('dragging');
+          if (dragState.overFolderId === f.id) tileClasses.push(dragState.before ? 'drop-before' : 'drop-after');
+          return `
+          <button class="${tileClasses.join(' ')}" data-drop-folder-id="${f.id}"
+                  draggable="true"
+                  ondragstart="handleFolderDragStart(${f.id}, event)"
+                  ondragover="handleFolderDragOver(${f.id}, event)"
+                  ondragleave="handleFolderDragLeave()"
+                  ondrop="handleFolderDrop(${f.id}, event)"
+                  ondragend="handleFolderDragEnd()"
+                  onclick="navigateToFolder(${f.id})"
+                  title="${escapeHtml(f.path || f.name)} — ${countFolderSounds(f)} sound${countFolderSounds(f) === 1 ? '' : 's'} — drag to reorder">
             <span class="subfolder-tile-icon">${icons.folder}</span>
             <span class="subfolder-tile-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
             <span class="subfolder-tile-count">${countFolderSounds(f)}</span>
           </button>
-        `).join('')}
+        `;}).join('')}
       </div>
     `;
   }
@@ -4130,11 +5457,19 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
             const length = ps ? (ps.lengthInMs || 1) : 0;
             const current = ps ? (ps.readInMs || 0) : 0;
             const percentage = length > 0 ? Math.min((current / length) * 100, 100) : 0;
+            const isPTL = sound.triggerMode === 3;
+            const manualDragAttrs = !sound.voicePreset
+              ? ` draggable="true" ondragstart="handleManualDragStart(${sound.id}, event)" ondragover="handleManualDragOver(${sound.id}, event)" ondragleave="handleManualDragLeave()" ondrop="handleManualDrop(${sound.id}, event)" ondragend="handleManualDragEnd()"`
+              : '';
+            const clickAttrs = isPTL
+              ? `onpointerdown="handlePTLDown(${sound.id}, event)" onpointerup="handlePTLUp(${sound.id})" onpointerleave="handlePTLUp(${sound.id})"`
+              : `onclick="handleSoundCardClick(${sound.id}, event)"`;
 
             return `
-              <div class="deck-tile ${isPlaying ? 'playing' : ''} ${hasImage ? 'has-card-image' : ''} ${isSelected ? 'is-selected' : ''}" 
+              <div class="deck-tile ${isPlaying ? 'playing' : ''} ${hasImage ? 'has-card-image' : ''} ${isSelected ? 'is-selected' : ''} ${state.manualDrag.overSoundId === sound.id ? 'drag-over' : ''}" 
                    style="${hasImage ? `background-image: url('${sound.image}');` : ''}"
-                   onclick="handleSoundCardClick(${sound.id}, event)"
+                   ${clickAttrs}
+                   ${manualDragAttrs}
                    oncontextmenu="handleSoundContextMenu(${sound.id}, event)">
                 ${hasImage ? `<div class="card-image-overlay"></div>` : ''}
 
@@ -4153,7 +5488,10 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
 
                 <!-- Middle: Sound Name -->
                 <div class="deck-tile-mid">
-                  <span class="deck-sound-name" title="${sound.name}">${sound.name}</span>
+                  ${sound.voicePreset ? `<span class="voice-slot-badge" title="Live voice slot">${sound.voicePreset}</span>` : ''}
+                  ${!sound.voicePreset && sound.triggerMode && sound.triggerMode !== 0 ? `<span class="policy-badge" title="${(TRIGGER_MODES[sound.triggerMode] || {}).label || ''}">${(TRIGGER_MODES[sound.triggerMode] || {}).label || ''}</span>` : ''}
+                  <span class="deck-sound-name" title="${soundDisplayName(sound)}">${soundDisplayName(sound)}</span>
+                  ${(sound.tags && sound.tags.length) ? `<span class="sound-tag-row">${sound.tags.slice(0, 3).map(tag => `<em class="sound-tag">${escapeHtml(tag)}</em>`).join('')}</span>` : ''}
                 </div>
 
                 <!-- Bottom: Equalizer / Duration + Transport -->
@@ -4233,10 +5571,18 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
             const isPlaying = !!state.playingSounds[sound.id];
             const hasImage = !!sound.image;
             const isSelected = state.selectedSoundIds && state.selectedSoundIds.includes(sound.id);
+            const isPTL = sound.triggerMode === 3;
+            const manualDragAttrs = !sound.voicePreset
+              ? ` draggable="true" ondragstart="handleManualDragStart(${sound.id}, event)" ondragover="handleManualDragOver(${sound.id}, event)" ondragleave="handleManualDragLeave()" ondrop="handleManualDrop(${sound.id}, event)" ondragend="handleManualDragEnd()"`
+              : '';
+            const clickAttrs = isPTL
+              ? `onpointerdown="handlePTLDown(${sound.id}, event)" onpointerup="handlePTLUp(${sound.id})" onpointerleave="handlePTLUp(${sound.id})"`
+              : `onclick="handleSoundCardClick(${sound.id}, event)"`;
             return `
-              <div class="sound-grid-card ${isPlaying ? 'playing' : ''} ${hasImage ? 'has-card-image' : ''} ${isSelected ? 'is-selected' : ''}" 
+              <div class="sound-grid-card ${isPlaying ? 'playing' : ''} ${hasImage ? 'has-card-image' : ''} ${isSelected ? 'is-selected' : ''} ${state.manualDrag.overSoundId === sound.id ? 'drag-over' : ''}" 
                    style="${hasImage ? `background-image: url('${sound.image}');` : ''}"
-                   onclick="handleSoundCardClick(${sound.id}, event)"
+                   ${clickAttrs}
+                   ${manualDragAttrs}
                    oncontextmenu="handleSoundContextMenu(${sound.id}, event)">
                 ${hasImage ? `<div class="card-image-overlay"></div>` : ''}
                 <div class="card-top" onclick="event.stopPropagation()">
@@ -4253,8 +5599,10 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
                   </button>
                 </div>
                 <div class="card-middle" onclick="handlePlaySound(${sound.id})">
+                  ${sound.voicePreset ? `<span class="voice-slot-badge" title="Live voice slot">${sound.voicePreset}</span>` : ''}
                   ${hasImage ? '' : `<div class="card-sound-icon">${icons.music}</div>`}
-                  <span class="card-sound-name" title="${sound.name}">${sound.name}</span>
+                  <span class="card-sound-name" title="${soundDisplayName(sound)}">${soundDisplayName(sound)}</span>
+                  ${(sound.tags && sound.tags.length) ? `<span class="sound-tag-row">${sound.tags.slice(0, 3).map(tag => `<em class="sound-tag">${escapeHtml(tag)}</em>`).join('')}</span>` : ''}
                 </div>
                 <div class="card-bottom" onclick="event.stopPropagation()">
                   <div style="display: flex; gap: 4px;">
@@ -4335,12 +5683,20 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
               ${soundsList.map((sound, idx) => {
                 const isPlaying = !!state.playingSounds[sound.id];
                 const isSelected = state.selectedSoundIds && state.selectedSoundIds.includes(sound.id);
+                const isPTL = sound.triggerMode === 3;
+                const manualDragAttrs = !sound.voicePreset
+                  ? ` draggable="true" ondragstart="handleManualDragStart(${sound.id}, event)" ondragover="handleManualDragOver(${sound.id}, event)" ondragleave="handleManualDragLeave()" ondrop="handleManualDrop(${sound.id}, event)" ondragend="handleManualDragEnd()"`
+                  : '';
+                const clickAttrs = isPTL
+                  ? `onpointerdown="handlePTLDown(${sound.id}, event)" onpointerup="handlePTLUp(${sound.id})" onpointerleave="handlePTLUp(${sound.id})"`
+                  : `onclick="handleSoundCardClick(${sound.id}, event)"`;
                 return `
-                  <tr class="sound-row ${isPlaying ? 'playing' : ''} ${isSelected ? 'is-selected' : ''}" 
-                      onclick="handleSoundCardClick(${sound.id}, event)"
+                  <tr class="sound-row ${isPlaying ? 'playing' : ''} ${isSelected ? 'is-selected' : ''} ${state.manualDrag.overSoundId === sound.id ? 'drag-over' : ''}" 
+                      ${clickAttrs}
                       ondblclick="handlePlaySound(${sound.id})" 
+                      ${manualDragAttrs}
                       oncontextmenu="handleSoundContextMenu(${sound.id}, event)">
-                    <td style="text-align: center; font-family: var(--font-mono); font-size: 11px; color: var(--color-muted);">${idx + 1}</td>
+                    <td style="text-align: center; font-family: var(--font-mono); font-size: 11px; color: var(--color-muted);">${isManualSortActive() ? '⠿' : (idx + 1)}</td>
                     <td style="text-align: center;">
                       <span class="fav-star ${sound.isFavorite ? 'active' : ''}" onclick="event.stopPropagation(); toggleFavorite(${sound.id}, ${sound.isFavorite})">
                         ★
@@ -4356,7 +5712,9 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
                         ${sound.image ? `
                           <div class="sound-row-avatar" style="background-image: url('${sound.image}');" title="Assigned image"></div>
                         ` : ''}
-                        <span class="sound-name-text">${sound.name}</span>
+                        ${sound.voicePreset ? `<span class="voice-slot-badge" title="Live voice slot">${sound.voicePreset}</span>` : ''}
+                        <span class="sound-name-text">${soundDisplayName(sound)}</span>
+                        ${(sound.tags && sound.tags.length) ? `<span class="sound-tag-row">${sound.tags.slice(0, 4).map(tag => `<em class="sound-tag">${escapeHtml(tag)}</em>`).join('')}</span>` : ''}
                       </div>
                     </td>
                     <td>
@@ -4458,10 +5816,24 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
       `;
     }
 
+    //* Whole-board loop button state: Off -> board-only -> board + subfolders.
+    const boardLoop = state.boardLoop || { mode: 0, tabId: null, index: 0, total: 0 };
+    const loopActiveHere = boardLoop.mode > 0 && boardLoop.tabId === activeTab.id;
+    const loopBadge = loopActiveHere && boardLoop.total > 0 ? ` (${boardLoop.index}/${boardLoop.total})` : '';
+    const loopLabel = !loopActiveHere
+      ? 'Loop Board'
+      : (boardLoop.mode === 1 ? `Looping Board${loopBadge}` : `Looping All Folders${loopBadge}`);
+    const loopClass = loopActiveHere ? (boardLoop.mode === 1 ? 'loop-board' : 'loop-folders') : '';
+    const loopTitle = !loopActiveHere
+      ? 'Play every sound of this board in order, top to bottom, and repeat. Click again to include all subfolders.'
+      : (boardLoop.mode === 1
+          ? `Looping this board's own sounds (${boardLoop.index}/${boardLoop.total}). Click to also loop every subfolder — board first, then subfolders left to right.`
+          : `Looping the board and all subfolders (${boardLoop.index}/${boardLoop.total}) — board sounds first, then each subfolder left to right. Click to stop.`);
+
     return `
       ${isFolderView && activeTab ? `
         <div class="table-header-wrapper">
-          <div class="checkbox-desc">Sort mode settings automatically sync with files order</div>
+          <div class="checkbox-desc">Sort mode settings automatically sync with files order — dragging sounds or folders switches to Manual order</div>
           <div class="toolbar-controls-group">
             <button class="btn-subtle" title="Create a new folder inside the current location" onclick="handleOpenNewFolderModal()">
               ${icons.folderPlus} New Folder
@@ -4483,11 +5855,17 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
                 <button class="vol-reset-btn" title="Reset boost to 100%" onclick="handleTabBoostReset(${activeTab.id})">Reset</button>
               ` : ''}
             </div>
+            <button class="btn-subtle board-loop-btn ${loopClass} ${loopActiveHere ? 'active' : ''}"
+                    onclick="handleBoardLoopClick(${activeTab.id})"
+                    title="${loopTitle}">
+              ${icons.repeat} ${loopLabel}
+            </button>
             <select class="sort-select" onchange="handleSetSortMode(${activeTab.id}, this.value)">
               <option value="0" ${activeTab.sortMode === 0 ? 'selected' : ''}>Modified Date (Asc)</option>
               <option value="1" ${activeTab.sortMode === 1 ? 'selected' : ''}>Modified Date (Desc)</option>
               <option value="2" ${activeTab.sortMode === 2 ? 'selected' : ''}>Alphabetical (Asc)</option>
               <option value="3" ${activeTab.sortMode === 3 ? 'selected' : ''}>Alphabetical (Desc)</option>
+              <option value="4" ${activeTab.sortMode === 4 ? 'selected' : ''}>Manual (Drag &amp; Drop)</option>
             </select>
           </div>
         </div>
@@ -4670,12 +6048,182 @@ function renderViewContent(soundsList, isFolderView, activeTab, activeFolder = n
                     ${state.settings.stopHotkey && state.settings.stopHotkey.length > 0 ? 'Stop Active' : 'Assign'}
                   </button>
                 </div>
+                <div class="hotkey-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Microphone mute hotkey</span>
+                    <span class="setting-toggle-desc">Toggles your microphone mute from anywhere.</span>
+                  </div>
+                  <button class="hotkey-badge ${state.settings.micMuteHotkey && state.settings.micMuteHotkey.length > 0 ? 'assigned' : ''}" onclick="startRecordHotkey(null, 'micmute')">
+                    ${state.settings.micMuteHotkey && state.settings.micMuteHotkey.length > 0 ? 'Mute Active' : 'Assign'}
+                  </button>
+                </div>
+                <div class="hotkey-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Hear myself hotkey</span>
+                    <span class="setting-toggle-desc">Toggles monitoring of your (voice-processed) microphone.</span>
+                  </div>
+                  <button class="hotkey-badge ${state.settings.hearMyselfHotkey && state.settings.hearMyselfHotkey.length > 0 ? 'assigned' : ''}" onclick="startRecordHotkey(null, 'hearmyself')">
+                    ${state.settings.hearMyselfHotkey && state.settings.hearMyselfHotkey.length > 0 ? 'Monitor Active' : 'Assign'}
+                  </button>
+                </div>
+                <div class="hotkey-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Overlay show / hide hotkey</span>
+                    <span class="setting-toggle-desc">Shows or hides the floating now-playing overlay.</span>
+                  </div>
+                  <button class="hotkey-badge ${state.settings.overlayHotkey && state.settings.overlayHotkey.length > 0 ? 'assigned' : ''}" onclick="startRecordHotkey(null, 'overlay')">
+                    ${state.settings.overlayHotkey && state.settings.overlayHotkey.length > 0 ? 'Overlay Active' : 'Assign'}
+                  </button>
+                </div>
+                <div class="hotkey-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Overlay position hotkey</span>
+                    <span class="setting-toggle-desc">Cycles the overlay between the eight screen positions.</span>
+                  </div>
+                  <button class="hotkey-badge ${state.settings.overlayPositionHotkey && state.settings.overlayPositionHotkey.length > 0 ? 'assigned' : ''}" onclick="startRecordHotkey(null, 'overlaypos')">
+                    ${state.settings.overlayPositionHotkey && state.settings.overlayPositionHotkey.length > 0 ? 'Position Active' : 'Assign'}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Live Voice & Monitoring -->
+            <section class="settings-card">
+              <header class="settings-card-head">
+                <span class="settings-card-icon">${icons.volume}</span>
+                <div class="settings-card-heading">
+                  <div class="settings-card-title">Live Voice &amp; Monitoring</div>
+                  <div class="settings-card-sub">Original local voice presets for your microphone</div>
+                </div>
+              </header>
+              <div class="settings-card-body">
+                <div class="settings-field">
+                  <div class="settings-field-label">Voice preset</div>
+                  <div class="segmented-control" style="flex-wrap: wrap;">
+                    ${VOICE_PRESETS.map(preset => `
+                      <button type="button" class="segment ${state.voicePreset === preset.value ? 'active' : ''}" onclick="handleSelectVoicePreset('${preset.value}')">
+                        ${preset.label}
+                      </button>
+                    `).join('')}
+                  </div>
+                  <div style="font-size: 11px; color: var(--color-muted); margin-top: 8px;">
+                    The processed microphone feeds your configured output pathway; add “Hear myself” to monitor it locally. Trigger presets instantly from soundboard <em>voice slots</em> or hotkeys.
+                  </div>
+                </div>
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Hear myself</span>
+                    <span class="setting-toggle-desc">Monitor the (voice-processed) microphone on your speakers or headphones.</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.settings.hearMyself ? 'checked' : ''} onchange="handleToggleHearMyself()">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Microphone muted</span>
+                    <span class="setting-toggle-desc">${state.micMuted ? 'Your microphone is currently muted.' : 'Your microphone is currently live.'}</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.micMuted ? 'checked' : ''} onchange="handleToggleMicMute()">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
               </div>
             </section>
           </div>
 
           <!-- Settings Panel Column 2 -->
           <div class="settings-col">
+
+            <!-- Now-Playing Overlay -->
+            <section class="settings-card">
+              <header class="settings-card-head">
+                <span class="settings-card-icon">${icons.monitor}</span>
+                <div class="settings-card-heading">
+                  <div class="settings-card-title">Now-Playing Overlay</div>
+                  <div class="settings-card-sub">Floating HUD with active sounds and the live voice</div>
+                </div>
+              </header>
+              <div class="settings-card-body">
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Show the overlay</span>
+                    <span class="setting-toggle-desc">A small always-on-top window with the current sounds. Drag it anywhere; needs Remote Control below.</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.settings.overlayEnabled ? 'checked' : ''} onchange="handleToggleOverlaySetting()">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
+                <div class="settings-field">
+                  <div class="settings-field-label">Position</div>
+                  <div class="overlay-position-grid">
+                    ${OVERLAY_POSITIONS.map((label, index) => `
+                      <button type="button" class="overlay-position-cell ${state.settings.overlayPosition === index ? 'active' : ''}"
+                              title="${label}"
+                              onclick="handleSetOverlayPosition(${index})">${label}</button>
+                    `).join('')}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Remote Control -->
+            <section class="settings-card">
+              <header class="settings-card-head">
+                <span class="settings-card-icon">${icons.systemInfo}</span>
+                <div class="settings-card-heading">
+                  <div class="settings-card-title">Remote Control</div>
+                  <div class="settings-card-sub">Phone / tablet soundboard and local automation — all on your LAN</div>
+                </div>
+              </header>
+              <div class="settings-card-body">
+                <label class="setting-toggle-row">
+                  <div class="setting-toggle-info">
+                    <span class="setting-toggle-title">Enable the control server</span>
+                    <span class="setting-toggle-desc">Serves the mobile controller page and a PIN-protected WebSocket protocol from this computer. No cloud, no accounts.</span>
+                  </div>
+                  <span class="modern-switch">
+                    <input type="checkbox" ${state.settings.remoteControlEnabled ? 'checked' : ''} onchange="updateSetting('remoteControlEnabled', this.checked); setTimeout(refreshRemoteInfo, 600);">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                  </span>
+                </label>
+
+                ${state.remoteInfo.running ? `
+                  <div class="remote-pairing-box">
+                    <div class="remote-pairing-row">
+                      <span class="remote-pairing-label">Address</span>
+                      <code class="remote-pairing-value">${remoteControllerUrl()}</code>
+                      <button class="btn-subtle remote-copy-btn" onclick="handleCopyRemoteUrl()">Copy</button>
+                    </div>
+                    <div class="remote-pairing-row">
+                      <span class="remote-pairing-label">Pairing PIN</span>
+                      <code class="remote-pairing-value remote-pin">${state.remoteInfo.pin || '——————'}</code>
+                      <button class="btn-subtle remote-copy-btn" onclick="handleRegeneratePin()">New PIN</button>
+                    </div>
+                    <div class="remote-qr-wrap">
+                      <canvas id="remote-qr" width="132" height="132"></canvas>
+                      <div class="remote-qr-hint">
+                        Open the address on your phone, enter the PIN, and the full soundboard becomes a remote with a customizable button grid, live now-playing, voice presets and a 10-second voice recorder.
+                      </div>
+                    </div>
+                  </div>
+                ` : `
+                  <div style="font-size: 12px; color: var(--color-muted); padding: 6px 2px;">
+                    ${state.remoteInfo.enabled ? 'The server could not bind its port — try a different one.' : 'Turn the toggle on to pair a phone or tablet as a remote controller.'}
+                  </div>
+                `}
+
+                <div class="settings-field">
+                  <div class="settings-field-label">Port (restarts the server)</div>
+                  <input class="modal-text-input" style="width: 140px;" type="number" min="1024" max="65535"
+                         value="${state.settings.remotePort}"
+                         onchange="const v = parseInt(this.value, 10); if (v >= 1024 && v <= 65535) updateSetting('remotePort', v);">
+                </div>
+              </div>
+            </section>
 
             <!-- Master Audio Volumes -->
             <section class="settings-card">
@@ -6176,6 +7724,18 @@ function renderModalOverlays() {
     } else if (isStop) {
       headingText = "Record Emergency Stop Shortcut";
       descText = "Press the key combination you wish to use to stop all playbacks.";
+    } else if (state.recordingTarget === 'micmute') {
+      headingText = "Record Microphone Mute Shortcut";
+      descText = "Press the key combination that toggles your microphone mute.";
+    } else if (state.recordingTarget === 'hearmyself') {
+      headingText = "Record Hear-Myself Shortcut";
+      descText = "Press the key combination that toggles local microphone monitoring.";
+    } else if (state.recordingTarget === 'overlay') {
+      headingText = "Record Overlay Shortcut";
+      descText = "Press the key combination that shows or hides the now-playing overlay.";
+    } else if (state.recordingTarget === 'overlaypos') {
+      headingText = "Record Overlay Position Shortcut";
+      descText = "Press the key combination that cycles the overlay position.";
     }
 
     return `
@@ -6193,7 +7753,332 @@ function renderModalOverlays() {
       </div>
     `;
   }
-  return '';
+  return renderV2Modals();
+}
+
+//* --- V2 feature modals: rename, tags, policies, move, recorder, trim -------
+function renderV2Modals() {
+  let html = '';
+
+  //* Rename sound
+  if (state.renameSoundModal && state.renameSoundModal.visible) {
+    const modal = state.renameSoundModal;
+    html += `
+      <div class="modal-overlay" onclick="handleCloseRenameSoundModal()">
+        <div class="modal-card" style="max-width: 420px; width: 100%;" onclick="event.stopPropagation()">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--color-primary);">Rename Sound</h3>
+            <button class="action-btn" onclick="handleCloseRenameSoundModal()">${icons.close}</button>
+          </div>
+          <p style="font-size: 12px; color: var(--color-muted); margin: 0 0 12px 0;">
+            Changes the display name only — the audio file on disk keeps its original name.
+          </p>
+          <input class="modal-text-input" style="width: 100%;" value="${escapeHtml(modal.name)}"
+                 oninput="handleRenameSoundInput(this.value)"
+                 onkeydown="handleRenameSoundKeydown(event)"
+                 placeholder="Display name" autofocus>
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button class="modal-btn cancel-btn" onclick="handleCloseRenameSoundModal()">Cancel</button>
+            <button class="modal-btn save-btn" onclick="handleSaveRenameSound()">Save Name</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  //* Tags
+  if (state.tagsModal && state.tagsModal.visible) {
+    const modal = state.tagsModal;
+    html += `
+      <div class="modal-overlay" onclick="handleCloseTagsModal()">
+        <div class="modal-card" style="max-width: 460px; width: 100%;" onclick="event.stopPropagation()">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--color-primary);">Edit Tags</h3>
+            <button class="action-btn" onclick="handleCloseTagsModal()">${icons.close}</button>
+          </div>
+          <p style="font-size: 12px; color: var(--color-muted); margin: 0 0 12px 0;">
+            Comma-separated tags, e.g. <em>funny, memes, loud</em>. Tags are searched alongside names.
+          </p>
+          <input class="modal-text-input" style="width: 100%;" value="${escapeHtml(modal.value)}"
+                 oninput="handleTagsInput(this.value)"
+                 onkeydown="handleTagsKeydown(event)"
+                 placeholder="tag1, tag2, tag3" autofocus>
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button class="modal-btn cancel-btn" onclick="handleCloseTagsModal()">Cancel</button>
+            <button class="modal-btn save-btn" onclick="handleSaveTags()">Save Tags</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  //* Playback policies / voice slot
+  if (state.policiesModal && state.policiesModal.visible) {
+    const modal = state.policiesModal;
+    html += `
+      <div class="modal-overlay" onclick="handleClosePoliciesModal()">
+        <div class="modal-card" style="max-width: 520px; width: 100%;" onclick="event.stopPropagation()">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--color-primary);">
+              ${modal.isVoiceSlot ? 'Voice Slot' : 'Playback Policies'}
+            </h3>
+            <button class="action-btn" onclick="handleClosePoliciesModal()">${icons.close}</button>
+          </div>
+
+          <label class="setting-toggle-row" style="border: 0; padding: 0; margin-bottom: 12px;">
+            <div class="setting-toggle-info">
+              <span class="setting-toggle-title">Live voice slot</span>
+              <span class="setting-toggle-desc">Triggering selects a live voice filter instead of playing a file.</span>
+            </div>
+            <span class="modern-switch">
+              <input type="checkbox" ${modal.isVoiceSlot ? 'checked' : ''} onchange="handlePolicyChange('isVoiceSlot', this.checked)">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </span>
+          </label>
+
+          ${modal.isVoiceSlot ? `
+            <div class="settings-field">
+              <div class="settings-field-label">Voice preset</div>
+              <div class="segmented-control" style="flex-wrap: wrap;">
+                ${VOICE_PRESETS.slice(1).map(preset => `
+                  <button type="button" class="segment ${modal.voicePreset === preset.value ? 'active' : ''}"
+                          onclick="handlePolicyChange('voicePreset', '${preset.value}')">${preset.label}</button>
+                `).join('')}
+              </div>
+              <p style="font-size: 11px; color: var(--color-muted); margin: 8px 0 0 0;">
+                Original, local DSP presets — the processed microphone is routed to your outputs (and to your own ears with "Hear myself").
+              </p>
+            </div>
+          ` : `
+            <div class="settings-field">
+              <div class="settings-field-label">Trigger behaviour</div>
+              ${TRIGGER_MODES.map(mode => `
+                <button type="button" class="policy-option ${modal.triggerMode === mode.value ? 'active' : ''}"
+                        onclick="handlePolicyChange('triggerMode', ${mode.value})" style="width: 100%; text-align: left; margin-bottom: 6px;">
+                  <strong>${mode.label}</strong>
+                  <span style="display: block; font-size: 11px; color: var(--color-muted); font-weight: 400;">${mode.desc}</span>
+                </button>
+              `).join('')}
+            </div>
+
+            <label class="setting-toggle-row">
+              <div class="setting-toggle-info">
+                <span class="setting-toggle-title">Loop by default</span>
+                <span class="setting-toggle-desc">Start with repeat enabled every time this sound triggers.</span>
+              </div>
+              <span class="modern-switch">
+                <input type="checkbox" ${modal.loopByDefault ? 'checked' : ''} onchange="handlePolicyChange('loopByDefault', this.checked)">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </span>
+            </label>
+            <label class="setting-toggle-row">
+              <div class="setting-toggle-info">
+                <span class="setting-toggle-title">Stop other sounds</span>
+                <span class="setting-toggle-desc">Starting this sound stops every other clip.</span>
+              </div>
+              <span class="modern-switch">
+                <input type="checkbox" ${modal.stopOthers ? 'checked' : ''} onchange="handlePolicyChange('stopOthers', this.checked)">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </span>
+            </label>
+            <label class="setting-toggle-row">
+              <div class="setting-toggle-info">
+                <span class="setting-toggle-title">Mute other sounds</span>
+                <span class="setting-toggle-desc">Temporarily silence other clips while this one plays; their volumes return when it ends.</span>
+              </div>
+              <span class="modern-switch">
+                <input type="checkbox" ${modal.muteOthers ? 'checked' : ''} onchange="handlePolicyChange('muteOthers', this.checked)">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </span>
+            </label>
+
+            <div class="settings-field" style="margin-top: 10px;">
+              <div class="settings-field-label">Mute microphone while this plays</div>
+              <div class="segmented-control">
+                <button type="button" class="segment ${modal.muteVoice === null ? 'active' : ''}" onclick="handlePolicyChange('muteVoice', null)">Inherit global</button>
+                <button type="button" class="segment ${modal.muteVoice === true ? 'active' : ''}" onclick="handlePolicyChange('muteVoice', true)">Always mute</button>
+                <button type="button" class="segment ${modal.muteVoice === false ? 'active' : ''}" onclick="handlePolicyChange('muteVoice', false)">Never mute</button>
+              </div>
+            </div>
+          `}
+
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button class="modal-btn cancel-btn" onclick="handleClosePoliciesModal()">Cancel</button>
+            <button class="modal-btn save-btn" onclick="handleSavePolicies()">Save</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  //* Move to board
+  if (state.moveModal && state.moveModal.visible) {
+    const modal = state.moveModal;
+    html += `
+      <div class="modal-overlay" onclick="handleCloseMoveModal()">
+        <div class="modal-card" style="max-width: 480px; width: 100%;" onclick="event.stopPropagation()">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--color-primary);">
+              Move ${modal.soundIds.length} sound${modal.soundIds.length === 1 ? '' : 's'} to…
+            </h3>
+            <button class="action-btn" onclick="handleCloseMoveModal()">${icons.close}</button>
+          </div>
+          <p style="font-size: 12px; color: var(--color-muted); margin: 0 0 12px 0;">
+            Files are moved on disk; hotkeys, favorites, images, tags and policies are preserved.
+          </p>
+          <div class="move-target-list">
+            ${state.tabs.map(tab => `
+              <button type="button" class="move-target-item ${modal.targetTabId === tab.id && modal.targetFolderId === 0 ? 'active' : ''}"
+                      onclick="handleMoveSelectTab(${tab.id}, 0)">
+                ${tab.icon ? `<img src="${tab.icon}" alt="" class="move-target-icon">` : `<span class="move-target-icon">${icons.folder}</span>`}
+                <span>${escapeHtml(tab.name)}</span>
+                <span style="margin-left: auto; font-size: 10.5px; color: var(--color-muted);">${tab.sounds.length + countTabSounds(tab) - tab.sounds.length} sounds</span>
+              </button>
+              ${(tab.folders || []).slice(0, 12).map(folder => `
+                <button type="button" class="move-target-item indent ${modal.targetTabId === tab.id && modal.targetFolderId === folder.id ? 'active' : ''}"
+                        onclick="handleMoveSelectTab(${tab.id}, ${folder.id})">
+                  <span class="move-target-icon">${icons.folder}</span>
+                  <span>${escapeHtml(folder.name)}</span>
+                  <span style="margin-left: auto; font-size: 10.5px; color: var(--color-muted);">in ${escapeHtml(tab.name)}</span>
+                </button>
+              `).join('')}
+            `).join('')}
+          </div>
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button class="modal-btn cancel-btn" onclick="handleCloseMoveModal()" ${modal.moving ? 'disabled' : ''}>Cancel</button>
+            <button class="modal-btn save-btn" onclick="handleConfirmMove()" ${modal.moving ? 'disabled' : ''}>
+              ${modal.moving ? 'Moving…' : 'Move here'}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  //* Recorder
+  if (state.recorderModal && state.recorderModal.visible) {
+    const modal = state.recorderModal;
+    const elapsed = (modal.elapsedMs / 1000).toFixed(1);
+    html += `
+      <div class="modal-overlay" onclick="handleCloseRecorderModal()">
+        <div class="modal-card" style="max-width: 520px; width: 100%;" onclick="event.stopPropagation()">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--color-primary);">Recorder</h3>
+            <button class="action-btn" onclick="handleCloseRecorderModal()">${icons.close}</button>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-field-label">Source</div>
+            <div class="segmented-control">
+              <button type="button" class="segment ${modal.source === 0 ? 'active' : ''}" onclick="handleRecorderSource(0)">Microphone</button>
+              <button type="button" class="segment ${modal.source === 1 ? 'active' : ''}" onclick="handleRecorderSource(1)"
+                      ${modal.systemAvailable ? '' : 'disabled style="opacity: 0.45; cursor: not-allowed;" title="No monitor source / loopback available"'}>
+                Desktop audio
+              </button>
+            </div>
+            ${modal.source === 1 && !modal.systemAvailable ? `
+              <p style="font-size: 11px; color: var(--color-muted); margin: 6px 0 0 0;">
+                Desktop capture needs a monitor source (Linux) or WASAPI loopback (Windows).
+              </p>
+            ` : ''}
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px; margin: 14px 0;">
+            <button class="btn-primary" style="flex: 0 0 auto; padding: 12px 20px; background: ${modal.isRecording ? 'var(--color-danger, #e0564b)' : 'var(--color-accent)'}; color: #1a1204; border: 0; border-radius: 10px; font-weight: 800; cursor: pointer;"
+                    onclick="handleToggleRecording()">
+              ${modal.isRecording ? '■ Stop' : '● Record'}
+            </button>
+            <div style="font-family: var(--font-mono); font-size: 22px; font-weight: 700;">
+              <span id="recorder-elapsed">${elapsed}</span>s
+              ${modal.isRecording ? '<span class="rec-pulse">●</span>' : ''}
+            </div>
+            <input class="modal-text-input" style="flex: 1;" value="${escapeHtml(modal.name)}"
+                   oninput="handleRecorderName(this.value)" placeholder="Recording name">
+          </div>
+
+          ${modal.lastPath ? `
+            <button class="btn-subtle" style="width: 100%; padding: 10px; cursor: pointer; border-radius: 10px; border: 1px dashed var(--border-color); background: none; color: var(--color-primary); font-size: 12px; font-weight: 600;"
+                    onclick="handleAddLastRecordingToBoard()" ${modal.busy ? 'disabled style="opacity: 0.5;"' : ''}>
+              ${modal.busy ? 'Adding…' : '＋ Add last recording to "' + escapeHtml((state.tabs.find(t => t.id === state.activeTabId) || {}).name || 'board') + '"'}
+            </button>
+          ` : ''}
+
+          <div style="border-top: 1px solid var(--border-color); margin-top: 16px; padding-top: 14px;">
+            <label class="setting-toggle-row">
+              <div class="setting-toggle-info">
+                <span class="setting-toggle-title">Instant Replay (30 s)</span>
+                <span class="setting-toggle-desc">Keep a rolling buffer of desktop audio and save the last half minute on demand.</span>
+              </div>
+              <span class="modern-switch">
+                <input type="checkbox" ${modal.replayArmed ? 'checked' : ''} onchange="handleToggleInstantReplay()">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </span>
+            </label>
+            <button class="btn-subtle" style="width: 100%; margin-top: 8px; padding: 10px; cursor: pointer; border-radius: 10px; border: 1px solid var(--border-color); background: none; color: var(--color-primary); font-size: 12px; font-weight: 600;"
+                    onclick="handleSaveInstantReplay()" ${modal.replayArmed ? '' : 'disabled style="opacity: 0.5;"'}>
+              ⏱ Save last 30 seconds
+            </button>
+          </div>
+
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button class="modal-btn cancel-btn" onclick="handleCloseRecorderModal()">Close</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  //* Trim
+  if (state.trimModal && state.trimModal.visible) {
+    const modal = state.trimModal;
+    html += `
+      <div class="modal-overlay" onclick="handleCloseTrimModal()">
+        <div class="modal-card" style="max-width: 640px; width: 100%;" onclick="event.stopPropagation()">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--color-primary);">Trim — ${escapeHtml(modal.name)}</h3>
+            <button class="action-btn" onclick="handleCloseTrimModal()">${icons.close}</button>
+          </div>
+          <p style="font-size: 12px; color: var(--color-muted); margin: 0 0 12px 0;">
+            Drag the handles to pick the region, preview it, then save a trimmed copy next to the original.
+          </p>
+
+          <div class="trim-waveform-wrap">
+            ${modal.peaks && modal.peaks.length ? `
+              <canvas id="trim-waveform" class="trim-waveform" width="600" height="120"
+                      onpointerdown="handleTrimPointerDown('area', event)"
+                      onpointermove="handleTrimPointerMove(event)"
+                      onpointerup="handleTrimPointerUp()"
+                      onpointerleave="handleTrimPointerUp()"></canvas>
+              <div class="trim-handle" id="trim-handle-start"
+                   style="left: ${modal.durationMs > 0 ? (modal.startMs / modal.durationMs * 100) : 0}%;"
+                   onpointerdown="handleTrimPointerDown('start', event)"></div>
+              <div class="trim-handle" id="trim-handle-end"
+                   style="left: ${modal.durationMs > 0 ? (modal.endMs / modal.durationMs * 100) : 100}%;"
+                   onpointerdown="handleTrimPointerDown('end', event)"></div>
+            ` : `
+              <div class="trim-waveform trim-empty">${modal.peaks ? 'Empty audio' : 'Decoding…'}</div>
+            `}
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-family: var(--font-mono); font-size: 12px;">
+            <span>Start: <strong id="trim-start-label">${formatDuration(modal.startMs)}</strong></span>
+            <span>Selection: <strong id="trim-length-label">${formatDuration(Math.max(0, modal.endMs - modal.startMs))}</strong></span>
+            <span>End: <strong id="trim-end-label">${formatDuration(modal.endMs)}</strong> / ${formatDuration(modal.durationMs)}</span>
+          </div>
+
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button class="modal-btn cancel-btn" onclick="handleCloseTrimModal()">Cancel</button>
+            <button class="modal-btn clear-btn" onclick="handleTrimPreview()" ${modal.peaks ? '' : 'disabled'}>▶ Preview</button>
+            <button class="modal-btn save-btn" onclick="handleTrimSave()" ${modal.peaks && !modal.saving ? '' : 'disabled'}>
+              ${modal.saving ? 'Saving…' : 'Save trimmed copy'}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  return html;
 }
 
 // Render sleek custom right-click context menu
@@ -6218,6 +8103,20 @@ function renderContextMenu() {
         <span class="context-menu-icon">${icons.openLink}</span>
         <span>Open in explorer</span>
       </button>
+
+      <button class="context-menu-item" onclick="handleAssignTabIcon(${tabId})">
+        <span class="context-menu-icon">${icons.image}</span>
+        <span>${tab.icon ? 'Change Board Icon...' : 'Assign Board Icon...'}</span>
+      </button>
+
+      ${tab.icon ? `
+        <button class="context-menu-item danger" onclick="handleRemoveTabIcon(${tabId})">
+          <span class="context-menu-icon">${icons.trash}</span>
+          <span>Remove Board Icon</span>
+        </button>
+      ` : ''}
+
+      <div class="context-menu-divider"></div>
 
       <button class="context-menu-item" onclick="closeContextMenu(); handleImportSounds(${tabId})" ${state.isImportingFolder ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
         <span class="context-menu-icon">${icons.music}</span>
@@ -6269,6 +8168,11 @@ function renderContextMenu() {
           <span>Remove Images from Selected (${state.selectedSoundIds.length})</span>
         </button>
 
+        <button class="context-menu-item" onclick="handleOpenMoveModal([...state.selectedSoundIds])">
+          <span class="context-menu-icon">${icons.folderPlus || '📁'}</span>
+          <span>Move to Board... (${state.selectedSoundIds.length})</span>
+        </button>
+
         <button class="context-menu-item" onclick="handleClearSelectedSounds(); closeContextMenu();">
           <span class="context-menu-icon">✖</span>
           <span>Deselect All</span>
@@ -6285,6 +8189,35 @@ function renderContextMenu() {
             <span>Stop Sound</span>
           </button>
         ` : ''}
+
+        <div class="context-menu-divider"></div>
+
+        <button class="context-menu-item" onclick="closeContextMenu(); handleOpenRenameSoundModal(${soundId})">
+          <span class="context-menu-icon">${icons.pencil}</span>
+          <span>Rename...</span>
+        </button>
+
+        <button class="context-menu-item" onclick="closeContextMenu(); handleOpenTagsModal(${soundId})">
+          <span class="context-menu-icon">🏷</span>
+          <span>Edit Tags...</span>
+        </button>
+
+        <button class="context-menu-item" onclick="closeContextMenu(); handleOpenPoliciesModal(${soundId})">
+          <span class="context-menu-icon">⚙</span>
+          <span>Playback Policies...</span>
+        </button>
+
+        ${targetSound.voicePreset ? '' : `
+          <button class="context-menu-item" onclick="closeContextMenu(); handleOpenTrimModal(${soundId})">
+            <span class="context-menu-icon">✂</span>
+            <span>Trim / Edit...</span>
+          </button>
+        `}
+
+        <button class="context-menu-item" onclick="closeContextMenu(); handleOpenMoveModal([${soundId}])">
+          <span class="context-menu-icon">${icons.folderPlus || '📁'}</span>
+          <span>Move to Board...</span>
+        </button>
 
         <div class="context-menu-divider"></div>
 
@@ -6327,7 +8260,11 @@ function currentViewSounds(currentTab) {
   if (!currentTab) return [];
   if (state.searchQuery && state.searchQuery.trim()) {
     const query = state.searchQuery.toLowerCase();
-    return flattenTabSounds(currentTab).filter(s => s.name.toLowerCase().includes(query));
+    return flattenTabSounds(currentTab).filter(s => {
+      const name = (s.displayName || s.name || '').toLowerCase();
+      const tags = (s.tags || []).some(t => (t || '').toLowerCase().includes(query));
+      return name.includes(query) || tags;
+    });
   }
   const folder = getActiveFolder(currentTab);
   return folder ? (folder.sounds || []) : (currentTab.sounds || []);
@@ -6476,11 +8413,11 @@ function installPreviewDemoBindings() {
     return null;
   };
 
-  const deliver = (name, payload) => {
+  const deliver = (name, ...payload) => {
     // Mimic the native shell: callbacks are posted asynchronously into the
     // event loop, never invoked synchronously from the binding call.
     setTimeout(() => {
-      if (typeof window[name] === 'function') window[name](JSON.parse(JSON.stringify(payload)));
+      if (typeof window[name] === 'function') window[name](...JSON.parse(JSON.stringify(payload)));
     }, 0);
   };
 
@@ -6654,6 +8591,246 @@ function installPreviewDemoBindings() {
       tab.sounds = [...(tab.sounds || []), ...children];
     }
     return cloneDemoTab(tab);
+  };
+
+  //* ---- V2 feature simulations ----
+  //* Locates a demo sound together with its owning tab (moves need both).
+  const locateDemoSound = (soundId) => {
+    for (const t of demoTabs) {
+      const all = [...t.sounds, ...(t.folders || []).flatMap(f => f.sounds || [])];
+      const hit = all.find(s => s.id === soundId);
+      if (hit) return { tab: t, sound: hit };
+    }
+    return null;
+  };
+
+  window.renameSound = async (soundId, name) => {
+    const hit = locateDemoSound(soundId);
+    if (!hit) return null;
+    hit.sound.displayName = name;
+    return JSON.parse(JSON.stringify(hit.sound));
+  };
+
+  window.setSoundTags = async (soundId, tags) => {
+    const hit = locateDemoSound(soundId);
+    if (!hit) return null;
+    hit.sound.tags = (tags || []).slice(0, 16);
+    return JSON.parse(JSON.stringify(hit.sound));
+  };
+
+  window.setSoundPolicies = async (soundId, triggerMode, loopByDefault, stopOthers, muteOthers, muteVoice) => {
+    const hit = locateDemoSound(soundId);
+    if (!hit) return null;
+    Object.assign(hit.sound, { triggerMode, loopByDefault, stopOthers, muteOthers, muteVoice });
+    return JSON.parse(JSON.stringify(hit.sound));
+  };
+
+  window.setSoundVoiceSlot = async (soundId, preset) => {
+    const hit = locateDemoSound(soundId);
+    if (!hit) return null;
+    hit.sound.voicePreset = preset || null;
+    return JSON.parse(JSON.stringify(hit.sound));
+  };
+
+  window.setTabIcon = async (tabId, icon) => {
+    const tab = findDemoTab(tabId);
+    if (!tab) return null;
+    tab.icon = icon || '';
+    return cloneDemoTab(tab);
+  };
+
+  window.setSoundOrder = async (tabId, orderedIds) => {
+    const tab = findDemoTab(tabId);
+    if (!tab) return null;
+    tab.sortMode = 4;
+    const orderOf = new Map(orderedIds.map((id, index) => [id, index]));
+    const byOrder = (a, b) => {
+      const ia = orderOf.has(a.id) ? orderOf.get(a.id) : 1e9;
+      const ib = orderOf.has(b.id) ? orderOf.get(b.id) : 1e9;
+      return ia - ib;
+    };
+    tab.sounds = [...tab.sounds].sort(byOrder);
+    const sortFolders = (folders) => {
+      folders.forEach(folder => {
+        folder.sounds = [...(folder.sounds || [])].sort(byOrder);
+        sortFolders(folder.folders || []);
+      });
+    };
+    sortFolders(tab.folders || []);
+    return cloneDemoTab(tab);
+  };
+
+  window.setFolderOrder = async (tabId, orderedIds) => {
+    const tab = findDemoTab(tabId);
+    if (!tab) return null;
+    tab.sortMode = 4;
+    const orderOf = new Map(orderedIds.map((id, index) => [id, index]));
+    const byFolderOrder = (a, b) => {
+      const ia = orderOf.has(a.id) ? orderOf.get(a.id) : 1e9;
+      const ib = orderOf.has(b.id) ? orderOf.get(b.id) : 1e9;
+      return ia - ib;
+    };
+    const sortLevel = (folders) => {
+      const sorted = [...folders].sort(byFolderOrder);
+      folders.length = 0;
+      folders.push(...sorted);
+      folders.forEach(folder => sortLevel(folder.folders || []));
+    };
+    sortLevel(tab.folders || []);
+    return cloneDemoTab(tab);
+  };
+
+  let demoBoardLoop = { mode: 0, tabId: null, index: 0, total: 0, currentSoundId: 0 };
+  window.boardLoopCycle = async (tabId) => {
+    const tab = findDemoTab(tabId);
+    if (!tab) return JSON.stringify({ ...demoBoardLoop });
+    const next = demoBoardLoop.tabId === tabId ? (demoBoardLoop.mode + 1) % 3 : 1;
+    let total = (tab.sounds || []).filter(s => !s.voicePreset).length;
+    if (next === 2) {
+      let extra = 0;
+      const walk = (folders) => {
+        (folders || []).forEach(f => {
+          extra += (f.sounds || []).filter(s => !s.voicePreset).length;
+          walk(f.folders);
+        });
+      };
+      walk(tab.folders);
+      total += extra;
+    }
+    if (total === 0) {
+      demoBoardLoop = { mode: 0, tabId: null, index: 0, total: 0, currentSoundId: 0 };
+    } else {
+      demoBoardLoop = { mode: next, tabId: tabId, index: 1, total: total, currentSoundId: 0 };
+    }
+    deliver('onBoardLoopChanged', demoBoardLoop.mode, demoBoardLoop.tabId);
+    return JSON.stringify({ ...demoBoardLoop });
+  };
+  window.getBoardLoopState = async () => JSON.stringify({ ...demoBoardLoop });
+
+  window.setSortMode = async (tabId, mode) => {
+    const tab = findDemoTab(tabId);
+    if (!tab) return null;
+    tab.sortMode = parseInt(mode, 10) || 0;
+    return cloneDemoTab(tab);
+  };
+
+  window.moveSoundsToTab = async (soundIds, targetTabId, targetFolderId) => {
+    for (const soundId of (soundIds || [])) {
+      const hit = locateDemoSound(soundId);
+      if (!hit) continue;
+      const target = findDemoTab(targetTabId);
+      if (!target) continue;
+      hit.tab.sounds = hit.tab.sounds.filter(s => s.id !== soundId);
+      (hit.tab.folders || []).forEach(f => { f.sounds = (f.sounds || []).filter(s => s.id !== soundId); });
+      const entry = JSON.parse(JSON.stringify(hit.sound));
+      entry.path = `C:/Soundboards/${target.name}/${entry.name}.mp3`;
+      if (targetFolderId && targetFolderId !== 0) {
+        const folder = findFolderInTree(target.folders, targetFolderId);
+        if (folder) folder.sounds = [...(folder.sounds || []), entry];
+        else target.sounds = [...target.sounds, entry];
+      } else {
+        target.sounds = [...target.sounds, entry];
+      }
+    }
+    return demoTabs.map(cloneDemoTab);
+  };
+
+  let demoRecording = { active: false, source: 0, startedAt: 0 };
+  let demoReplayArmed = false;
+
+  window.systemRecordingAvailable = async () => true;
+  window.recorderStart = async (source) => {
+    if (demoRecording.active) return false;
+    demoRecording = { active: true, source, startedAt: Date.now() };
+    return true;
+  };
+  window.recorderStop = async (name) => {
+    demoRecording.active = false;
+    return `C:/Users/demo/Recordings/${(name || 'Demo Recording')}.wav`;
+  };
+  window.recorderStatus = async () => JSON.stringify({
+    active: demoRecording.active,
+    source: demoRecording.source,
+    elapsedMs: demoRecording.active ? (Date.now() - demoRecording.startedAt) : 0,
+    capturedFrames: 0, sampleRate: 48000, channels: 2
+  });
+  window.armInstantReplay = async () => { demoReplayArmed = true; return true; };
+  window.disarmInstantReplay = async () => { demoReplayArmed = false; };
+  window.instantReplayArmed = async () => demoReplayArmed;
+  window.saveInstantReplay = async (name) =>
+    `C:/Users/demo/Recordings/${(name || 'Instant Replay')}.wav`;
+
+  window.getSoundWaveform = async (soundId, buckets) => {
+    const count = buckets || 480;
+    const peaks = [];
+    for (let i = 0; i < count; i++) {
+      const t = i / count;
+      const envelope = Math.sin(Math.PI * t) * (0.35 + 0.65 * Math.abs(Math.sin(t * 21 + soundId)));
+      peaks.push(-envelope * (0.6 + 0.4 * Math.abs(Math.sin(t * 53))));
+      peaks.push(envelope * (0.6 + 0.4 * Math.abs(Math.cos(t * 37))));
+    }
+    return JSON.stringify({ peaks, durationMs: 8400 + (soundId % 7) * 300 });
+  };
+
+  window.trimSound = async (soundId, startMs, endMs) => {
+    const hit = locateDemoSound(soundId);
+    if (!hit) return null;
+    const created = demoSound(demoImportSeq++, `${hit.sound.name} (trimmed)`, false, []);
+    created.path = hit.sound.path.replace(/\.[^.]+$/, '') + ' (trimmed).wav';
+    hit.tab.sounds = [...hit.tab.sounds, created];
+    return JSON.parse(JSON.stringify(created));
+  };
+
+  window.importFileIntoTab = async (tabId, path, parentFolderId) => {
+    const tab = findDemoTab(tabId);
+    if (!tab) return null;
+    const name = folderBaseName(path).replace(/\.[^.]+$/, '') || 'Recording';
+    const created = demoSound(demoImportSeq++, name, false, []);
+    if (parentFolderId && parentFolderId !== 0) {
+      const folder = findFolderInTree(tab.folders, parentFolderId);
+      if (folder) folder.sounds = [...(folder.sounds || []), created];
+      else tab.sounds = [...tab.sounds, created];
+    } else {
+      tab.sounds = [...tab.sounds, created];
+    }
+    return cloneDemoTab(tab);
+  };
+
+  let demoMicMuted = false;
+  window.toggleMicMute = async () => {
+    demoMicMuted = !demoMicMuted;
+    deliver('onMicMuteChanged', demoMicMuted);
+    return demoMicMuted;
+  };
+  window.isMicMuted = async () => demoMicMuted;
+  window.toggleHearMyself = async () => {
+    demoSettings.hearMyself = !demoSettings.hearMyself;
+    return demoSettings.hearMyself;
+  };
+  window.setVoicePreset = async (preset) => {
+    if (!['off', 'deep', 'high', 'echo', 'robot'].includes(preset)) return false;
+    deliver('onVoicePresetChanged', preset);
+    return true;
+  };
+  window.getVoicePreset = async () => 'off';
+
+  window.toggleOverlay = async () => {
+    demoSettings.overlayEnabled = !demoSettings.overlayEnabled;
+    showToast(demoSettings.overlayEnabled
+      ? '(demo) The overlay window opens in the compiled app'
+      : '(demo) Overlay hidden', 'info');
+    return demoSettings.overlayEnabled;
+  };
+  let demoRemotePin = '482913';
+  window.setOverlayPosition = async (position) => {
+    demoSettings.overlayPosition = position;
+  };
+  window.getRemoteInfo = async () => JSON.stringify({
+    enabled: true, running: true, port: 38712, pin: demoRemotePin, address: '192.168.1.42'
+  });
+  window.regenerateRemotePin = async () => {
+    demoRemotePin = String(Math.floor(100000 + Math.random() * 900000));
+    return demoRemotePin;
   };
 }
 

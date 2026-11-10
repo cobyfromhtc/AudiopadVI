@@ -31,6 +31,32 @@ namespace Audiopad
         }
         void Hotkeys::onKeyUp(int key)
         {
+            //* Push-to-Loop: releasing any key of the held hotkey stops the loop.
+            if (!activeHolds.empty())
+            {
+                std::vector<std::uint32_t> toStop;
+                for (auto it = activeHolds.begin(); it != activeHolds.end();)
+                {
+                    const bool belongs = std::find(it->keys.begin(), it->keys.end(), key) != it->keys.end();
+                    if (belongs)
+                    {
+                        toStop.push_back(it->soundId);
+                        it = activeHolds.erase(it);
+                    }
+                    else
+                    {
+                        ++it;
+                    }
+                }
+                for (const auto soundId : toStop)
+                {
+                    if (Globals::gGui)
+                    {
+                        Globals::gGui->stopSound(soundId);
+                    }
+                }
+            }
+
             if (notify && !pressedKeys.empty() &&
                 std::find(pressedKeys.begin(), pressedKeys.end(), key) != pressedKeys.end())
             {
@@ -118,10 +144,37 @@ namespace Audiopad
                 return;
             }
 
-            if (!Globals::gSettings.stopHotkey.empty() && (pressedKeys == Globals::gSettings.stopHotkey ||
-                                                           isCloseMatch(pressedKeys, Globals::gSettings.stopHotkey)))
+            const auto matchesHotkey = [&](const std::vector<int> &keys) {
+                return !keys.empty() && (pressedKeys == keys || isCloseMatch(pressedKeys, keys));
+            };
+
+            if (!Globals::gSettings.stopHotkey.empty() &&
+                matchesHotkey(Globals::gSettings.stopHotkey))
             {
                 Globals::gGui->stopSounds();
+                return;
+            }
+
+            //* Additional global controls: microphone mute, "hear myself"
+            //* monitoring and the now-playing overlay (show/hide + position).
+            if (matchesHotkey(Globals::gSettings.micMuteHotkey))
+            {
+                Globals::gGui->toggleMicMute();
+                return;
+            }
+            if (matchesHotkey(Globals::gSettings.hearMyselfHotkey))
+            {
+                Globals::gGui->toggleHearMyself();
+                return;
+            }
+            if (matchesHotkey(Globals::gSettings.overlayHotkey))
+            {
+                Globals::gGui->toggleOverlay();
+                return;
+            }
+            if (matchesHotkey(Globals::gSettings.overlayPositionHotkey))
+            {
+                Globals::gGui->cycleOverlayPosition();
                 return;
             }
 
@@ -157,6 +210,16 @@ namespace Audiopad
                 if (pSound)
                 {
                     Globals::gGui->onSoundPlayed(*pSound);
+                }
+
+                //* Push-to-Loop: remember the trigger keys so the key-up handler
+                //* can stop the looping clip again.
+                if (bestMatch->triggerMode == Enums::TriggerMode::PushToLoop && !bestMatch->voicePreset)
+                {
+                    ActiveHold hold;
+                    hold.keys = pressedKeys;
+                    hold.soundId = bestMatch->id;
+                    activeHolds.emplace_back(std::move(hold));
                 }
             }
         }

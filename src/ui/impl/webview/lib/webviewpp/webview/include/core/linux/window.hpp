@@ -64,6 +64,19 @@ namespace Webview
         //* the drop position in widget coordinates; the position is (-1, -1)
         //* when it could not be determined.
         void setFileDropCallback(std::function<void(std::vector<std::string>, int, int)> callback);
+
+        //* --- Floating overlay support (now-playing HUD) ---
+        //* Keeps the window above every other window while active.
+        void setKeepAbove(bool state);
+        //* Removes the native titlebar so the page can draw its own chrome.
+        void setUndecorated();
+        //* Moves the window to an absolute screen position.
+        void moveTo(int x, int y);
+        //* Size of the primary monitor (overlay corner placement).
+        static std::pair<int, int> screenSize();
+        //* Begins the native window-move loop from a pointer press inside the
+        //* web UI (drag-by-HUD).
+        void startDrag();
     };
 } // namespace Webview
 #endif

@@ -649,4 +649,35 @@ void Webview::Window::Window::disableAcceleratorKeys(bool state)
     }
 }
 
+//* --- Floating overlay support (now-playing HUD) ---
+void Webview::Window::setAlwaysOnTop(bool state)
+{
+    if (!hwnd)
+    {
+        return;
+    }
+
+    dispatchMessage([this, state] {
+        SetWindowPos(hwnd, state ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    });
+}
+
+void Webview::Window::moveTo(int x, int y)
+{
+    if (!hwnd)
+    {
+        return;
+    }
+
+    dispatchMessage([this, x, y] {
+        SetWindowPos(hwnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+    });
+}
+
+std::pair<int, int> Webview::Window::screenSize()
+{
+    return {GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
+}
+
 #endif

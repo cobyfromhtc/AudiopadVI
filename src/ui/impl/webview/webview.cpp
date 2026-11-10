@@ -1,5 +1,6 @@
 #include "webview.hpp"
 #include <algorithm>
+#include <chrono>
 #include <core/global/globals.hpp>
 #include <cstdint>
 #include <fancy.hpp>
@@ -12,6 +13,7 @@
 #include <helper/systeminfo/systeminfo.hpp>
 #include <helper/version/check.hpp>
 #include <nfd.hpp>
+#include <random>
 
 #ifdef _WIN32
 #include "../../assets/icon.h"
@@ -22,6 +24,57 @@
 
 namespace Audiopad::Objects
 {
+    namespace
+    {
+        //* Effective (display) name of a sound for frontend & remote clients.
+        std::string effectiveSoundName(const Sound &sound)
+        {
+            return sound.displayName ? *sound.displayName : sound.name;
+        }
+
+        //* Cryptographically unambitious but perfectly adequate 6-digit PIN.
+        std::string generateRemotePin()
+        {
+            const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+            std::mt19937 generator(static_cast<std::uint32_t>(now));
+            std::uniform_int_distribution<int> digits(0, 9);
+            std::string pin;
+            for (int index = 0; index < 6; index++)
+            {
+                pin.push_back(static_cast<char>('0' + digits(generator)));
+            }
+            return pin;
+        }
+
+        //* Overlay geometry: a compact, always-on-top HUD strip.
+        constexpr std::size_t kOverlayWidth = 460;
+        constexpr std::size_t kOverlayHeight = 128;
+        constexpr int kOverlayMargin = 14;
+
+        //* Board-loop state as JSON for the frontend (mode: 0 off / 1 board
+        //* only / 2 board + subfolders; index is the 1-based position).
+        std::string boardLoopInfoJson(const BoardLoopInfo &info)
+        {
+            nlohmann::json payload;
+            payload["mode"] = static_cast<int>(info.mode);
+            payload["tabId"] = info.tabId;
+            payload["index"] = info.index;
+            payload["total"] = info.total;
+            payload["currentSoundId"] = info.currentSoundId;
+            return payload.dump();
+        }
+    } // namespace
+
+    WebView::~WebView()
+    {
+        destroyOverlay();
+        if (Globals::gControlServer)
+        {
+            Globals::gControlServer->stop();
+            Globals::gControlServer.reset();
+        }
+    }
+
     void WebView::setup()
     {
         Window::setup();
@@ -81,6 +134,10 @@ namespace Audiopad::Objects
         //* Real-time detection of external folder changes (e.g. sounds added via the
         //* file explorer) — one watcher per category, debounced and pushed to the UI.
         restartTabWatchers();
+
+        //* Local remote-control / automation interface (mobile controller page,
+        //* overlay feed, WebSocket protocol). PIN-protected, user-toggleable.
+        ensureControlServer();
 
         //* Native drag & drop: the webview shell hands us the real file system paths
         //* of everything dragged in from the OS file manager plus the drop position
@@ -498,6 +555,180 @@ namespace Audiopad::Objects
             }
         }));
 #endif
+
+        //* --- Sound & board organization ---
+        webview->expose(Webview::Function(
+            "renameSound", [this](std::uint32_t id, const std::string &name) { return renameSound(id, name); }));
+        webview->expose(Webview::Function("setSoundTags",
+                                          [this](std::uint32_t id, const std::vector<std::string> &tags) {
+                                              return setSoundTags(id, tags);
+                                          }));
+        webview->expose(Webview::Function(
+            "setSoundPolicies",
+            [this](std::uint32_t id, Enums::TriggerMode triggerMode, bool loopByDefault, bool stopOthers,
+                   bool muteOthers, const std::optional<bool> &muteVoice) {
+                return setSoundPolicies(id, triggerMode, loopByDefault, stopOthers, muteOthers, muteVoice);
+            }));
+        webview->expose(Webview::Function("setSoundVoiceSlot",
+                                          [this](std::uint32_t id, const std::optional<std::string> &preset) {
+                                              return setSoundVoiceSlot(id, preset);
+                                          }));
+        webview->expose(Webview::Function("setTabIcon", [this](const std::uint32_t &id, const std::string &icon) {
+            if (icon.empty())
+            {
+                return setTabIcon(id, "");
+            }
+
+            auto processed = Helpers::Artwork::importDataUrl(icon);
+            if (!processed)
+            {
+                Fancy::fancy.logTime().warning() << "Rejected board icon update: payload too large or invalid"
+                                                 << std::endl;
+                return std::optional<Tab>(std::nullopt);
+            }
+            return setTabIcon(id, processed->dataUrl);
+        }));
+        webview->expose(
+            Webview::Function("setSoundOrder", [this](std::uint32_t tabId, const std::vector<std::uint32_t> &orderedIds) {
+                return setSoundOrder(tabId, orderedIds);
+            }));
+        webview->expose(
+            Webview::Function("setFolderOrder", [this](std::uint32_t tabId, const std::vector<std::uint32_t> &orderedIds) {
+                return setFolderOrder(tabId, orderedIds);
+            }));
+        webview->expose(Webview::Function("boardLoopCycle", [this](std::uint32_t tabId) {
+            return boardLoopInfoJson(boardLoopCycle(tabId));
+        }));
+        webview->expose(Webview::Function("getBoardLoopState", [this]() {
+            return boardLoopInfoJson(getBoardLoopState());
+        }));
+        webview->expose(Webview::AsyncFunction("moveSoundsToTab",
+                                               [this](const Webview::Promise &promise,
+                                                      const std::vector<std::uint32_t> &soundIds,
+                                                      std::uint32_t targetTabId, std::uint32_t targetFolderId) {
+                                                   //* Runs off the UI thread — moving potentially many files
+                                                   //* across boards must never freeze the interface.
+                                                   //* targetFolderId 0 means the board root.
+                                                   auto tabs = moveSoundsToTab(
+                                                       soundIds, targetTabId,
+                                                       targetFolderId == 0
+                                                           ? std::nullopt
+                                                           : std::optional<std::uint32_t>(targetFolderId));
+                                                   restartTabWatchers();
+                                                   promise.resolve(tabs);
+                                               }));
+
+        //* --- Recording & editing ---
+        webview->expose(Webview::Function("systemRecordingAvailable",
+                                          []() { return Helpers::Recorder::systemCaptureAvailable(); }));
+        webview->expose(Webview::Function(
+            "recorderStart",
+            [](int source, const std::optional<std::string> &deviceName) {
+                return Globals::gRecorder.start(static_cast<Helpers::Recorder::Source>(source), deviceName);
+            }));
+        webview->expose(Webview::Function("recorderStop", [](const std::optional<std::string> &desiredName) {
+            auto path = Globals::gRecorder.stop(desiredName);
+            return path ? *path : "";
+        }));
+        webview->expose(Webview::Function("recorderStatus", []() -> std::string {
+            const auto status = Globals::gRecorder.status();
+            nlohmann::json payload;
+            payload["active"] = status.active;
+            payload["source"] = static_cast<int>(status.source);
+            payload["elapsedMs"] = status.elapsedMs;
+            payload["capturedFrames"] = status.capturedFrames;
+            payload["sampleRate"] = status.sampleRate;
+            payload["channels"] = status.channels;
+            return payload.dump();
+        }));
+        webview->expose(
+            Webview::Function("armInstantReplay", []() { return Globals::gRecorder.armInstantReplay(); }));
+        webview->expose(Webview::Function("disarmInstantReplay", []() { Globals::gRecorder.disarmInstantReplay(); }));
+        webview->expose(Webview::Function("instantReplayArmed", []() { return Globals::gRecorder.instantReplayArmed(); }));
+        webview->expose(Webview::Function("saveInstantReplay", [](const std::optional<std::string> &desiredName) {
+            auto path = Globals::gRecorder.saveInstantReplay(desiredName);
+            return path ? *path : "";
+        }));
+        webview->expose(Webview::Function(
+            "getSoundWaveform",
+            [](std::uint32_t soundId, int buckets) -> std::string {
+                auto sound = Globals::gData.getSound(soundId);
+                if (!sound)
+                {
+                    return "{\"peaks\":[],\"durationMs\":0}";
+                }
+                const std::size_t requested = buckets <= 0 ? 480 : static_cast<std::size_t>(buckets);
+                const auto waveform = Helpers::Recorder::waveformPeaks(sound->get().path, requested);
+                nlohmann::json payload;
+                payload["peaks"] = waveform ? waveform->peaks : std::vector<float>{};
+                payload["durationMs"] = waveform ? waveform->durationMs : 0;
+                return payload.dump();
+            }));
+        webview->expose(Webview::AsyncFunction(
+            "trimSound", [this](const Webview::Promise &promise, std::uint32_t soundId, std::uint64_t startMs,
+                                std::uint64_t endMs) {
+                auto trimmed = trimSound(soundId, startMs, endMs);
+                if (trimmed)
+                {
+                    promise.resolve(*trimmed);
+                }
+                else
+                {
+                    promise.discard();
+                }
+            }));
+        webview->expose(Webview::AsyncFunction(
+            "importFileIntoTab",
+            [this](const Webview::Promise &promise, std::uint32_t tabId, const std::string &path,
+                   std::uint32_t parentFolderId) {
+                auto tab = importFileIntoTab(tabId, path,
+                                             parentFolderId == 0 ? std::nullopt
+                                                                 : std::optional<std::uint32_t>(parentFolderId));
+                if (tab)
+                {
+                    promise.resolve(*tab);
+                }
+                else
+                {
+                    promise.discard();
+                }
+            }));
+
+        //* --- Live controls ---
+        webview->expose(Webview::Function("toggleMicMute", [this]() { return toggleMicMute(); }));
+        webview->expose(Webview::Function("isMicMuted", [this]() { return isMicMuted(); }));
+        webview->expose(Webview::Function("toggleHearMyself", [this]() { return toggleHearMyself(); }));
+        webview->expose(Webview::Function("setVoicePreset", [this](const std::string &presetName) -> bool {
+            const auto preset = Audiopad::Audio::MicMonitor::presetFromString(presetName);
+            if (!preset)
+            {
+                return false;
+            }
+            setVoicePreset(static_cast<Enums::VoicePreset>(*preset));
+            return true;
+        }));
+        webview->expose(Webview::Function("getVoicePreset", [this]() -> std::string {
+            return Audiopad::Audio::MicMonitor::presetName(static_cast<Audiopad::Audio::MicMonitor::Preset>(Globals::gGui->voicePreset()));
+        }));
+
+        //* --- Now-playing overlay & remote control ---
+        webview->expose(Webview::Function("toggleOverlay", [this]() { return toggleOverlay(); }));
+        webview->expose(Webview::Function("setOverlayPosition", [this](int position) { setOverlayPosition(position); }));
+        webview->expose(Webview::Function("getRemoteInfo", []() -> std::string {
+            nlohmann::json payload;
+            payload["enabled"] = Globals::gSettings.remoteControlEnabled;
+            payload["running"] = Globals::gControlServer && Globals::gControlServer->isRunning();
+            payload["port"] = Globals::gSettings.remotePort;
+            payload["pin"] = Globals::gSettings.remotePin ? *Globals::gSettings.remotePin : "";
+            payload["address"] = Helpers::ControlServer::lanAddress();
+            return payload.dump();
+        }));
+        webview->expose(Webview::Function("regenerateRemotePin", []() -> std::string {
+            const std::string pin = generateRemotePin();
+            Globals::gSettings.remotePin = pin;
+            Globals::gConfig.save();
+            return pin;
+        }));
     }
     bool WebView::onClose()
     {
@@ -677,6 +908,10 @@ namespace Audiopad::Objects
     void WebView::onSoundFinished(const PlayingSound &sound)
     {
         Window::onSoundFinished(sound);
+        if (Globals::gControlServer)
+        {
+            Globals::gControlServer->broadcastFinished(sound.sound.id);
+        }
         if (sound.playbackDevice.isDefault)
         {
             webview->callFunction<void>(Webview::JavaScriptFunction("window.finishSound", sound));
@@ -685,17 +920,72 @@ namespace Audiopad::Objects
     void WebView::onSoundPlayed(const PlayingSound &sound)
     {
         webview->callFunction<void>(Webview::JavaScriptFunction("window.onSoundPlayed", sound));
+        if (Globals::gControlServer)
+        {
+            Globals::gControlServer->broadcastPlaying(sound.sound.id, effectiveSoundName(sound.sound));
+        }
     }
     void WebView::onSoundProgressed(const PlayingSound &sound)
     {
         webview->callFunction<void>(Webview::JavaScriptFunction("window.updateSound", sound));
+        if (Globals::gControlServer && sound.reportsProgress)
+        {
+            Globals::gControlServer->broadcastProgress(sound.sound.id, sound.readInMs.load(), sound.lengthInMs,
+                                                       sound.paused.load());
+        }
+    }
+    void WebView::onMicMuteChanged(bool muted)
+    {
+        webview->callFunction<void>(Webview::JavaScriptFunction("window.onMicMuteChanged", muted));
+        if (Globals::gControlServer)
+        {
+            Globals::gControlServer->broadcastMicMute(muted);
+        }
+    }
+    void WebView::onVoicePresetChanged(Enums::VoicePreset preset)
+    {
+        const std::string name = Audiopad::Audio::MicMonitor::presetName(static_cast<Audiopad::Audio::MicMonitor::Preset>(preset));
+        webview->callFunction<void>(Webview::JavaScriptFunction("window.onVoicePresetChanged", name));
+        if (Globals::gControlServer)
+        {
+            Globals::gControlServer->broadcastVoicePreset(name);
+        }
+    }
+    void WebView::onBoardLoopChanged(Enums::BoardLoopMode mode, std::uint32_t tabId)
+    {
+        webview->callFunction<void>(
+            Webview::JavaScriptFunction("window.onBoardLoopChanged", static_cast<int>(mode), tabId));
     }
     void WebView::onError(const Enums::ErrorCode &error)
     {
         webview->callFunction<void>(Webview::JavaScriptFunction("window.onError", static_cast<std::uint8_t>(error)));
     }
+    void WebView::onAllSoundsFinished()
+    {
+        Window::onAllSoundsFinished();
+        webview->callFunction<void>(Webview::JavaScriptFunction("window.getStore().commit", "clearCurrentlyPlaying"));
+        webview->callFunction<void>(Webview::JavaScriptFunction("window.onAllSoundsFinished"));
+        if (Globals::gControlServer)
+        {
+            Globals::gControlServer->broadcastAllStopped();
+        }
+    }
+    void WebView::onSwitchOnConnectDetected(bool state)
+    {
+        webview->callFunction<void>(
+            Webview::JavaScriptFunction("window.getStore().commit", "setSwitchOnConnectLoaded", state));
+    }
+    void WebView::onAdminRequired()
+    {
+        webview->callFunction<void>(
+            Webview::JavaScriptFunction("window.getStore().commit", "setAdministrativeModal", true));
+    }
+
     Settings WebView::changeSettings(Settings newSettings)
     {
+        const bool remoteWasEnabled = Globals::gSettings.remoteControlEnabled;
+        const int oldPort = Globals::gSettings.remotePort;
+
         auto rtn = Window::changeSettings(newSettings);
         if (tray)
         {
@@ -713,27 +1003,221 @@ namespace Audiopad::Objects
             }
         }
 
+        //* Keep the local control interface in sync with the settings: start /
+        //* stop on the enable toggle, restart when the port changed.
+        if (Globals::gSettings.remoteControlEnabled != remoteWasEnabled ||
+            Globals::gSettings.remotePort != oldPort)
+        {
+            if (Globals::gControlServer)
+            {
+                Globals::gControlServer->stop();
+                Globals::gControlServer.reset();
+                destroyOverlay();
+            }
+            ensureControlServer();
+            syncOverlay();
+        }
+
         return rtn;
     }
+
     void WebView::onSettingsChanged()
     {
         webview->callFunction<void>(
             Webview::JavaScriptFunction("window.getStore().commit", "setSettings", Globals::gSettings));
+        syncOverlay();
     }
-    void WebView::onAllSoundsFinished()
+
+    //* --- Now-playing overlay ---------------------------------------------
+
+    bool WebView::toggleOverlay()
     {
-        Window::onAllSoundsFinished();
-        webview->callFunction<void>(Webview::JavaScriptFunction("window.getStore().commit", "clearCurrentlyPlaying"));
-        webview->callFunction<void>(Webview::JavaScriptFunction("window.onAllSoundsFinished"));
+        const bool next = !Globals::gSettings.overlayEnabled;
+        Globals::gSettings.overlayEnabled = next;
+        Globals::gConfig.save();
+        syncOverlay();
+        onSettingsChanged();
+        return next;
     }
-    void WebView::onSwitchOnConnectDetected(bool state)
+
+    void WebView::setOverlayPosition(int position)
     {
-        webview->callFunction<void>(
-            Webview::JavaScriptFunction("window.getStore().commit", "setSwitchOnConnectLoaded", state));
+        Window::setOverlayPosition(position);
+        applyOverlayPosition();
+        onSettingsChanged();
     }
-    void WebView::onAdminRequired()
+
+    void WebView::cycleOverlayPosition()
     {
-        webview->callFunction<void>(
-            Webview::JavaScriptFunction("window.getStore().commit", "setAdministrativeModal", true));
+        Window::cycleOverlayPosition();
+        applyOverlayPosition();
+        onSettingsChanged();
+    }
+
+    void WebView::syncOverlay()
+    {
+        if (Globals::gSettings.overlayEnabled)
+        {
+            createOverlay();
+        }
+        else
+        {
+            destroyOverlay();
+        }
+    }
+
+    void WebView::createOverlay()
+    {
+        if (overlayWindow)
+        {
+            applyOverlayPosition();
+            return;
+        }
+
+        if (!Globals::gControlServer || !Globals::gControlServer->isRunning())
+        {
+            Fancy::fancy.logTime().warning()
+                << "The now-playing overlay needs the local control server — enable Remote Control first"
+                << std::endl;
+            onError(Enums::ErrorCode::RemoteControlUnavailable);
+            return;
+        }
+
+        const std::string pin = Globals::gSettings.remotePin ? *Globals::gSettings.remotePin : "";
+
+        overlayWindow = std::make_shared<Webview::Window>("audiopad-overlay", kOverlayWidth, kOverlayHeight);
+        overlayWindow->setTitle("Audiopad");
+        overlayWindow->enableDevTools(false);
+        overlayWindow->enableContextMenu(false);
+
+        overlayWindow->expose(Webview::Function("overlayClose", [this]() {
+            Globals::gSettings.overlayEnabled = false;
+            Globals::gConfig.save();
+            syncOverlay();
+            onSettingsChanged();
+        }));
+        overlayWindow->expose(Webview::Function("overlayDrag", [this]() {
+            if (overlayWindow)
+            {
+                overlayWindow->startDrag();
+            }
+        }));
+
+#if defined(_WIN32)
+        overlayWindow->enableFramelessWindow();
+        overlayWindow->setAlwaysOnTop(true);
+#else
+        overlayWindow->setUndecorated();
+        overlayWindow->setKeepAbove(true);
+#endif
+
+        overlayWindow->setUrl("http://127.0.0.1:" + std::to_string(Globals::gControlServer->port()) +
+                              "/overlay?pin=" + pin);
+        applyOverlayPosition();
+        overlayWindow->show();
+    }
+
+    void WebView::destroyOverlay()
+    {
+        if (!overlayWindow)
+        {
+            return;
+        }
+
+        //* WM_QUIT (Window::exit) would terminate the whole application's
+        //* message loop — the overlay closes through the regular WM_CLOSE /
+        //* GTK destroy path instead.
+#if defined(_WIN32)
+        overlayWindow->requestClose();
+#else
+        overlayWindow->exit();
+#endif
+        overlayWindow.reset();
+    }
+
+    void WebView::applyOverlayPosition()
+    {
+        if (!overlayWindow)
+        {
+            return;
+        }
+
+        const auto [screenWidth, screenHeight] = Webview::Window::screenSize();
+        const int width = static_cast<int>(kOverlayWidth);
+        const int height = static_cast<int>(kOverlayHeight);
+        const int margin = kOverlayMargin;
+
+        int x = margin;
+        int y = margin;
+        switch (Globals::gSettings.overlayPosition % 8)
+        {
+        case 0: //* top-left
+            x = margin;
+            y = margin;
+            break;
+        case 1: //* top-center
+            x = (screenWidth - width) / 2;
+            y = margin;
+            break;
+        case 2: //* top-right
+            x = screenWidth - width - margin;
+            y = margin;
+            break;
+        case 3: //* right-center
+            x = screenWidth - width - margin;
+            y = (screenHeight - height) / 2;
+            break;
+        case 4: //* bottom-right
+            x = screenWidth - width - margin;
+            y = screenHeight - height - margin;
+            break;
+        case 5: //* bottom-center
+            x = (screenWidth - width) / 2;
+            y = screenHeight - height - margin;
+            break;
+        case 6: //* bottom-left
+            x = margin;
+            y = screenHeight - height - margin;
+            break;
+        case 7: //* left-center
+        default:
+            x = margin;
+            y = (screenHeight - height) / 2;
+            break;
+        }
+
+        overlayWindow->moveTo(x, y);
+    }
+
+    //* --- Local remote-control server --------------------------------------
+
+    void WebView::ensureControlServer()
+    {
+        const bool wanted = Globals::gSettings.remoteControlEnabled;
+        const bool running = Globals::gControlServer && Globals::gControlServer->isRunning();
+
+        if (wanted && !running)
+        {
+            if (!Globals::gSettings.remotePin || Globals::gSettings.remotePin->size() != 6)
+            {
+                Globals::gSettings.remotePin = generateRemotePin();
+                Globals::gConfig.save();
+            }
+
+            if (Globals::gSettings.remotePort <= 0 || Globals::gSettings.remotePort > 65535)
+            {
+                Globals::gSettings.remotePort = 38712;
+            }
+
+            Globals::gControlServer =
+                std::make_unique<Helpers::ControlServer>(static_cast<std::uint16_t>(Globals::gSettings.remotePort));
+            Globals::gControlServer->start();
+        }
+        else if (!wanted && running)
+        {
+            Globals::gControlServer->stop();
+            Globals::gControlServer.reset();
+            destroyOverlay();
+        }
     }
 } // namespace Audiopad::Objects

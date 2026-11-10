@@ -28,6 +28,11 @@ namespace Audiopad::Objects
                 Globals::gFavorites->erase(sound.id);
             }
         }
+        void deindexSoundById(const std::uint32_t &id)
+        {
+            Globals::gSounds->erase(id);
+            Globals::gFavorites->erase(id);
+        }
         void indexFolder(Folder &folder)
         {
             for (auto &sound : folder.sounds)
@@ -460,6 +465,179 @@ namespace Audiopad::Objects
             {
                 scopedFavorites->at(id).get().image = image;
             }
+        }
+    }
+
+    namespace
+    {
+        //* Applies `mutate` to the matching sound inside a folder tree. Returns
+        //* true when the entry was found and mutated.
+        bool updateFolderSound(Folder &folder, const std::uint32_t &id, const std::function<void(Sound &)> &mutate)
+        {
+            for (auto &sound : folder.sounds)
+            {
+                if (sound.id == id)
+                {
+                    mutate(sound);
+                    return true;
+                }
+            }
+            for (auto &child : folder.folders)
+            {
+                if (updateFolderSound(child, id, mutate))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        bool removeFolderSound(Folder &folder, const std::uint32_t &id)
+        {
+            for (auto it = folder.sounds.begin(); it != folder.sounds.end(); it++)
+            {
+                if (it->id == id)
+                {
+                    folder.sounds.erase(it);
+                    return true;
+                }
+            }
+            for (auto &child : folder.folders)
+            {
+                if (removeFolderSound(child, id))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    } // namespace
+
+    std::optional<Sound> Data::updateSound(const std::uint32_t &id, const std::function<void(Sound &)> &mutate)
+    {
+        Sound updated;
+        bool found = false;
+
+        for (auto &tab : tabs)
+        {
+            for (auto &sound : tab.sounds)
+            {
+                if (sound.id == id)
+                {
+                    mutate(sound);
+                    updated = sound;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                for (auto &folder : tab.folders)
+                {
+                    if (updateFolderSound(folder, id, mutate))
+                    {
+                        //* Re-read the mutated entry through the walker's tree.
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (found)
+            {
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            Fancy::fancy.logTime().warning() << "Tried to update non existent sound " << id << std::endl;
+            return std::nullopt;
+        }
+
+        //* Re-read the final state through the live reference (covers the nested
+        //* folder path where the walker mutated a deeper copy of the entry).
+        if (auto sound = getSound(id); sound)
+        {
+            updated = sound->get();
+        }
+
+        //* The favorites map aliases the same tree entries — keep any stored
+        //* copy in sync the same way setSoundImage does.
+        auto scopedFavorites = Globals::gFavorites.scoped();
+        if (scopedFavorites->find(id) != scopedFavorites->end())
+        {
+            mutate(scopedFavorites->at(id).get());
+        }
+
+        return updated;
+    }
+
+    void Data::removeSoundFromModel(const std::uint32_t &id)
+    {
+        for (auto &tab : tabs)
+        {
+            bool removed = false;
+            for (auto it = tab.sounds.begin(); it != tab.sounds.end(); it++)
+            {
+                if (it->id == id)
+                {
+                    tab.sounds.erase(it);
+                    removed = true;
+                    break;
+                }
+            }
+            if (!removed)
+            {
+                for (auto &folder : tab.folders)
+                {
+                    if (removeFolderSound(folder, id))
+                    {
+                        removed = true;
+                        break;
+                    }
+                }
+            }
+
+            if (removed)
+            {
+                //* Drop any manual-order reference to the removed entry.
+                tab.soundOrder.erase(std::remove(tab.soundOrder.begin(), tab.soundOrder.end(), id),
+                                     tab.soundOrder.end());
+                break;
+            }
+        }
+
+        deindexSoundById(id);
+    }
+
+    void Data::seedSoundInTab(const std::uint32_t &tabId, const Sound &sound)
+    {
+        if (tabs.size() <= tabId)
+        {
+            Fancy::fancy.logTime().warning() << "Tried to seed sound into non existent tab " << tabId << std::endl;
+            return;
+        }
+
+        auto &tab = tabs.at(tabId);
+        for (const auto &existing : tab.sounds)
+        {
+            if (existing.id == sound.id || existing.path == sound.path)
+            {
+                return; //* already present — nothing to seed
+            }
+        }
+
+        tab.sounds.emplace_back(sound);
+        if (tab.sortMode == Enums::SortMode::Manual &&
+            std::find(tab.soundOrder.begin(), tab.soundOrder.end(), sound.id) == tab.soundOrder.end())
+        {
+            tab.soundOrder.emplace_back(sound.id);
+        }
+
+        Globals::gSounds->insert({sound.id, tab.sounds.back()});
+        if (sound.isFavorite)
+        {
+            Globals::gFavorites->insert({sound.id, tab.sounds.back()});
         }
     }
 } // namespace Audiopad::Objects

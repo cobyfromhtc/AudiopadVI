@@ -1,6 +1,7 @@
 #include "ui.hpp"
 #include <algorithm>
 #include <core/global/globals.hpp>
+#include <core/objects/ordering.hpp>
 #include <cstdint>
 #include <cstdlib>
 #include <fancy.hpp>
@@ -63,36 +64,17 @@ namespace Audiopad::Objects
             return position == std::string::npos ? "" : normalizedPath.substr(0, position);
         }
 
-        void sortSounds(std::vector<Sound> &sounds, Enums::SortMode sortMode)
+        void sortSounds(std::vector<Sound> &sounds, Enums::SortMode sortMode,
+                        const std::vector<std::uint32_t> *manualOrder = nullptr)
         {
-            switch (sortMode)
-            {
-            case Enums::SortMode::ModifiedDate_Descending:
-                std::sort(sounds.begin(), sounds.end(), [](const auto &first, const auto &second) {
-                    return first.modifiedDate > second.modifiedDate;
-                });
-                break;
-            case Enums::SortMode::ModifiedDate_Ascending:
-                std::sort(sounds.begin(), sounds.end(), [](const auto &first, const auto &second) {
-                    return first.modifiedDate < second.modifiedDate;
-                });
-                break;
-            case Enums::SortMode::Alphabetical_Descending:
-                std::sort(sounds.begin(), sounds.end(),
-                          [](const auto &first, const auto &second) { return first.name > second.name; });
-                break;
-            case Enums::SortMode::Alphabetical_Ascending:
-                std::sort(sounds.begin(), sounds.end(),
-                          [](const auto &first, const auto &second) { return first.name < second.name; });
-                break;
-            }
+            //* Thin wrapper over the shared, unit-tested arrangement helpers so
+            //* the scan pipeline, the UI and the board loop always agree.
+            Ordering::sortSounds(sounds, sortMode, manualOrder);
         }
 
-        void sortFolders(std::vector<Folder> &folders)
+        void sortFolders(std::vector<Folder> &folders, const std::vector<std::uint32_t> *manualOrder = nullptr)
         {
-            std::sort(folders.begin(), folders.end(), [](const Folder &first, const Folder &second) {
-                return toLower(first.name) < toLower(second.name);
-            });
+            Ordering::sortFolders(folders, manualOrder);
         }
 
         //* Finds a not-yet-existing directory name inside `parent` — "Name",
@@ -245,6 +227,14 @@ namespace Audiopad::Objects
                 sound.localVolume = previous->localVolume;
                 sound.remoteVolume = previous->remoteVolume;
                 sound.image = previous->image;
+                sound.displayName = previous->displayName;
+                sound.tags = previous->tags;
+                sound.triggerMode = previous->triggerMode;
+                sound.loopByDefault = previous->loopByDefault;
+                sound.stopOthers = previous->stopOthers;
+                sound.muteOthers = previous->muteOthers;
+                sound.muteVoice = previous->muteVoice;
+                sound.voicePreset = previous->voicePreset;
             }
             else
             {
@@ -306,8 +296,8 @@ namespace Audiopad::Objects
                 }
             }
 
-            sortSounds(folder.sounds, tab.sortMode);
-            sortFolders(folder.folders);
+            sortSounds(folder.sounds, tab.sortMode, &tab.soundOrder);
+            sortFolders(folder.folders, tab.sortMode == Enums::SortMode::Manual ? &tab.folderOrder : nullptr);
             return folder;
         }
 
@@ -1101,12 +1091,13 @@ namespace Audiopad::Objects
         if (parentFolder)
         {
             parentFolder->folders.emplace_back(newFolder);
-            sortFolders(parentFolder->folders);
+            sortFolders(parentFolder->folders,
+                        tab->sortMode == Enums::SortMode::Manual ? &tab->folderOrder : nullptr);
         }
         else
         {
             tab->folders.emplace_back(newFolder);
-            sortFolders(tab->folders);
+            sortFolders(tab->folders, tab->sortMode == Enums::SortMode::Manual ? &tab->folderOrder : nullptr);
         }
 
         auto newTab = Globals::gData.setTab(tabId, *tab);
@@ -1233,100 +1224,71 @@ namespace Audiopad::Objects
         return Globals::gData.getTabs();
     }
 #if defined(__linux__)
-    std::optional<PlayingSound> Window::playSound(const std::uint32_t &id)
+    std::optional<PlayingSound> Window::playSoundStreams(const Sound &sound)
     {
-        auto sound = Globals::gData.getSound(id);
-        if (sound)
+        auto playingSound = Globals::gAudio.play(sound, std::nullopt, false, true);
+        auto remotePlayingSound = Globals::gAudio.play(sound, Globals::gAudio.nullSink, true, false);
+
+        if (playingSound && remotePlayingSound)
         {
-            if (!Globals::gSettings.allowOverlapping)
+            groupedSounds->insert({playingSound->id, remotePlayingSound->id});
+
+            //* Target window mode: the soundboard stream is moved exclusively into
+            //* the selected application's recording input. It is never routed into
+            //* any other app (e.g. Discord), no matter which outputs are configured.
+            if (Globals::gSettings.targetWindow)
             {
-                stopSounds(true);
-            }
-            if (Globals::gSettings.muteDuringPlayback)
-            {
-                if (Globals::gAudioBackend)
+                auto targetApp = findTargetRecordingApp(*Globals::gSettings.targetWindow);
+                if (targetApp && Globals::gAudioBackend->inputSoundTo(targetApp))
                 {
-                    if (!Globals::gAudioBackend->muteInput(true))
+                    onSoundPlayed(*playingSound);
+                    return *playingSound;
+                }
+
+                //* The target is not currently capturing audio. The remote copy
+                //* simply stays on the inaudible null sink instead of leaking into
+                //* other chat programs.
+                Fancy::fancy.logTime().warning()
+                    << "Target window '" << *Globals::gSettings.targetWindow
+                    << "' is not receiving audio right now — sound kept exclusive to it" << std::endl;
+                onError(Enums::ErrorCode::FailedToMoveToSink);
+                onSoundPlayed(*playingSound);
+                return *playingSound;
+            }
+
+            if (Globals::gSettings.outputs.empty() && playingSound)
+            {
+                onSoundPlayed(*playingSound);
+                return *playingSound;
+            }
+            if (!Globals::gSettings.outputs.empty() && Globals::gAudioBackend)
+            {
+                bool moveSuccess = false;
+                for (const auto &outputApp : Globals::gSettings.outputs)
+                {
+                    if (Globals::gAudioBackend->inputSoundTo(Globals::gAudioBackend->getRecordingApp(outputApp)))
                     {
-                        onError(Enums::ErrorCode::FailedToMute);
+                        moveSuccess = true;
                     }
                 }
-            }
-            if (!Globals::gSettings.pushToTalkKeys.empty())
-            {
-                Globals::gHotKeys.pressKeys(Globals::gSettings.pushToTalkKeys);
-            }
 
-            auto playingSound = Globals::gAudio.play(*sound, std::nullopt, false, true);
-            auto remotePlayingSound = Globals::gAudio.play(*sound, Globals::gAudio.nullSink, true, false);
-
-            if (playingSound && remotePlayingSound)
-            {
-                groupedSounds->insert({playingSound->id, remotePlayingSound->id});
-
-                //* Target window mode: the soundboard stream is moved exclusively into
-                //* the selected application's recording input. It is never routed into
-                //* any other app (e.g. Discord), no matter which outputs are configured.
-                if (Globals::gSettings.targetWindow)
+                if (!moveSuccess)
                 {
-                    auto targetApp = findTargetRecordingApp(*Globals::gSettings.targetWindow);
-                    if (targetApp && Globals::gAudioBackend->inputSoundTo(targetApp))
-                    {
-                        onSoundPlayed(*playingSound);
-                        return *playingSound;
-                    }
+                    if (playingSound)
+                        stopSound(playingSound->id);
+                    if (remotePlayingSound)
+                        stopSound(remotePlayingSound->id);
 
-                    //* The target is not currently capturing audio. The remote copy
-                    //* simply stays on the inaudible null sink instead of leaking into
-                    //* other chat programs.
-                    Fancy::fancy.logTime().warning()
-                        << "Target window '" << *Globals::gSettings.targetWindow
-                        << "' is not receiving audio right now — sound kept exclusive to it" << std::endl;
                     onError(Enums::ErrorCode::FailedToMoveToSink);
-                    onSoundPlayed(*playingSound);
-                    return *playingSound;
+                    return std::nullopt;
                 }
 
-                if (Globals::gSettings.outputs.empty() && playingSound)
-                {
-                    onSoundPlayed(*playingSound);
-                    return *playingSound;
-                }
-                if (!Globals::gSettings.outputs.empty() && Globals::gAudioBackend)
-                {
-                    bool moveSuccess = false;
-                    for (const auto &outputApp : Globals::gSettings.outputs)
-                    {
-                        if (Globals::gAudioBackend->inputSoundTo(Globals::gAudioBackend->getRecordingApp(outputApp)))
-                        {
-                            moveSuccess = true;
-                        }
-                    }
-
-                    if (!moveSuccess)
-                    {
-                        if (playingSound)
-                            stopSound(playingSound->id);
-                        if (remotePlayingSound)
-                            stopSound(remotePlayingSound->id);
-
-                        onError(Enums::ErrorCode::FailedToMoveToSink);
-                        return std::nullopt;
-                    }
-
-                    onSoundPlayed(*playingSound);
-                    return *playingSound;
-                }
+                onSoundPlayed(*playingSound);
+                return *playingSound;
             }
         }
-        else
-        {
-            Fancy::fancy.logTime().failure() << "Sound " << id << " not found" << std::endl;
-            onError(Enums::ErrorCode::SoundNotFound);
-            return std::nullopt;
-        }
 
-        Fancy::fancy.logTime().failure() << "Failed to play sound " << id << std::endl;
+        Fancy::fancy.logTime().failure() << "Failed to play sound " << sound.id << std::endl;
         onError(Enums::ErrorCode::FailedToPlay);
         return std::nullopt;
     }
@@ -1427,160 +1389,95 @@ namespace Audiopad::Objects
         }
     } // namespace
 
-    std::optional<PlayingSound> Window::playSound(const std::uint32_t &id)
+    std::optional<PlayingSound> Window::playSoundStreams(const Sound &sound)
     {
-        auto sound = Globals::gData.getSound(id);
-        if (sound)
+        //* Target window mode: the remote stream plays exclusively into the target's
+        //* audio pathway (the configured output / VB-Cable). Other chat programs do
+        //* not receive the soundboard audio because it never touches them. A second
+        //* local monitor stream guarantees the user always hears what is being sent:
+        //* when the target device is the system default (a common VB-Cable/Voicemeeter
+        //* setup) the monitor is rerouted to the first real speaker/headphone device
+        //* instead of silently vanishing into the virtual cable.
+        if (Globals::gSettings.targetWindow)
         {
-            if (!Globals::gSettings.allowOverlapping)
+            auto targetDevice = findTargetOutputDevice();
+
+            //* No virtual pathway available at all — fall back to the default device so
+            //* the target app at least receives audio when it listens on the default.
+            if (!targetDevice)
             {
-                stopSounds();
-            }
-            if (Globals::gSettings.muteDuringPlayback)
-            {
-                if (Globals::gWinSound && Globals::gWinSound->getMic())
+                for (const auto &device : Globals::gAudio.getAudioDevices())
                 {
-                    if (!Globals::gWinSound->getMic()->mute(true))
+                    if (device.isDefault)
                     {
-                        onError(Enums::ErrorCode::FailedToMute);
-                    }
-                }
-            }
-            if (!Globals::gSettings.pushToTalkKeys.empty())
-            {
-                Globals::gHotKeys.pressKeys(Globals::gSettings.pushToTalkKeys);
-            }
-
-            //* Target window mode: the remote stream plays exclusively into the target's
-            //* audio pathway (the configured output / VB-Cable). Other chat programs do
-            //* not receive the soundboard audio because it never touches them. A second
-            //* local monitor stream guarantees the user always hears what is being sent:
-            //* when the target device is the system default (a common VB-Cable/Voicemeeter
-            //* setup) the monitor is rerouted to the first real speaker/headphone device
-            //* instead of silently vanishing into the virtual cable.
-            if (Globals::gSettings.targetWindow)
-            {
-                auto targetDevice = findTargetOutputDevice();
-
-                //* No virtual pathway available at all — fall back to the default device so
-                //* the target app at least receives audio when it listens on the default.
-                if (!targetDevice)
-                {
-                    for (const auto &device : Globals::gAudio.getAudioDevices())
-                    {
-                        if (device.isDefault)
-                        {
-                            targetDevice = device;
-                            break;
-                        }
-                    }
-
-                    if (targetDevice)
-                    {
-                        Fancy::fancy.logTime().warning()
-                            << "Target window '" << *Globals::gSettings.targetWindow
-                            << "' has no virtual output device to route through — falling back to the default device"
-                            << std::endl;
+                        targetDevice = device;
+                        break;
                     }
                 }
 
-                const auto monitorDevice = findLocalMonitorDevice(targetDevice);
-                const bool dualStream = monitorDevice && targetDevice &&
-                                       !isSameAudioDevice(*monitorDevice, *targetDevice);
-
-                std::optional<PlayingSound> localSound;
-                std::optional<PlayingSound> remoteSound;
-
-                if (dualStream)
-                {
-                    //* The monitor is the stream the user hears — it drives the UI progress.
-                    localSound = Globals::gAudio.play(*sound, monitorDevice, false, true);
-                    remoteSound = Globals::gAudio.play(*sound, targetDevice, true, false);
-                }
-                else if (targetDevice)
-                {
-                    //* Single stream: the target device is already audible to the user, or no
-                    //* separate monitor device exists. It feeds the target and doubles as the
-                    //* progress-reporting stream.
-                    remoteSound = Globals::gAudio.play(*sound, targetDevice, true, true);
-                }
-
-                if (localSound && remoteSound)
-                {
-                    groupedSounds->insert({localSound->id, remoteSound->id});
-                    onSoundPlayed(*localSound);
-                    return *localSound;
-                }
-
-                //* Graceful degradation: never kill a working stream just because its
-                //* partner failed to start.
-                if (localSound)
+                if (targetDevice)
                 {
                     Fancy::fancy.logTime().warning()
                         << "Target window '" << *Globals::gSettings.targetWindow
-                        << "' stream could not start — playing locally only" << std::endl;
-                    onError(Enums::ErrorCode::FailedToMoveToSink);
-                    onSoundPlayed(*localSound);
-                    return *localSound;
+                        << "' has no virtual output device to route through — falling back to the default device"
+                        << std::endl;
                 }
-
-                if (remoteSound)
-                {
-                    onSoundPlayed(*remoteSound);
-                    return *remoteSound;
-                }
-
-                Fancy::fancy.logTime().failure() << "Failed to play sound " << id << std::endl;
-                onError(Enums::ErrorCode::FailedToPlay);
-                return std::nullopt;
             }
 
-            if (Globals::gSettings.outputs.empty() && !Globals::gSettings.useAsDefaultDevice)
+            const auto monitorDevice = findLocalMonitorDevice(targetDevice);
+            const bool dualStream = monitorDevice && targetDevice &&
+                                   !isSameAudioDevice(*monitorDevice, *targetDevice);
+
+            std::optional<PlayingSound> localSound;
+            std::optional<PlayingSound> remoteSound;
+
+            if (dualStream)
             {
-                auto playingSound = Globals::gAudio.play(*sound, std::nullopt, false, true);
-                if (playingSound)
-                {
-                    onSoundPlayed(*playingSound);
-                }
-                return playingSound;
+                //* The monitor is the stream the user hears — it drives the UI progress.
+                localSound = Globals::gAudio.play(sound, monitorDevice, false, true);
+                remoteSound = Globals::gAudio.play(sound, targetDevice, true, false);
             }
-
-            if (Globals::gSettings.outputs.empty())
+            else if (targetDevice)
             {
-                //* "Use as default device" with no explicit outputs — a single stream on
-                //* the default device is all we can do (and all we need).
-                auto playingSound = Globals::gAudio.play(*sound, std::nullopt, false, true);
-                if (playingSound)
-                {
-                    onSoundPlayed(*playingSound);
-                }
-                return playingSound;
+                //* Single stream: the target device is already audible to the user, or no
+                //* separate monitor device exists. It feeds the target and doubles as the
+                //* progress-reporting stream.
+                remoteSound = Globals::gAudio.play(sound, targetDevice, true, true);
             }
 
-            auto playingSound = Globals::gAudio.play(*sound, std::nullopt, false, true);
-            auto playbackDevice = Globals::gAudio.getAudioDevice(Globals::gSettings.outputs.front());
-
-            if (playbackDevice && !playbackDevice->isDefault)
+            if (localSound && remoteSound)
             {
-                auto remotePlayingSound = Globals::gAudio.play(*sound, playbackDevice, true, false);
-                if (playingSound && remotePlayingSound)
-                {
-                    groupedSounds->insert({playingSound->id, remotePlayingSound->id});
-                    onSoundPlayed(*playingSound);
-                    return *playingSound;
-                }
-
-                if (playingSound)
-                    stopSound(playingSound->id);
-
-                if (remotePlayingSound)
-                    stopSound(remotePlayingSound->id);
-
-                Fancy::fancy.logTime().failure() << "Failed to play sound " << id << std::endl;
-                onError(Enums::ErrorCode::FailedToPlay);
-                return std::nullopt;
+                groupedSounds->insert({localSound->id, remoteSound->id});
+                onSoundPlayed(*localSound);
+                return *localSound;
             }
 
+            //* Graceful degradation: never kill a working stream just because its
+            //* partner failed to start.
+            if (localSound)
+            {
+                Fancy::fancy.logTime().warning()
+                    << "Target window '" << *Globals::gSettings.targetWindow
+                    << "' stream could not start — playing locally only" << std::endl;
+                onError(Enums::ErrorCode::FailedToMoveToSink);
+                onSoundPlayed(*localSound);
+                return *localSound;
+            }
+
+            if (remoteSound)
+            {
+                onSoundPlayed(*remoteSound);
+                return *remoteSound;
+            }
+
+            Fancy::fancy.logTime().failure() << "Failed to play sound " << sound.id << std::endl;
+            onError(Enums::ErrorCode::FailedToPlay);
+            return std::nullopt;
+        }
+
+        if (Globals::gSettings.outputs.empty() && !Globals::gSettings.useAsDefaultDevice)
+        {
+            auto playingSound = Globals::gAudio.play(sound, std::nullopt, false, true);
             if (playingSound)
             {
                 onSoundPlayed(*playingSound);
@@ -1588,11 +1485,1138 @@ namespace Audiopad::Objects
             return playingSound;
         }
 
-        Fancy::fancy.logTime().failure() << "Sound " << id << " not found" << std::endl;
-        onError(Enums::ErrorCode::SoundNotFound);
-        return std::nullopt;
+        if (Globals::gSettings.outputs.empty())
+        {
+            //* "Use as default device" with no explicit outputs — a single stream on
+            //* the default device is all we can do (and all we need).
+            auto playingSound = Globals::gAudio.play(sound, std::nullopt, false, true);
+            if (playingSound)
+            {
+                onSoundPlayed(*playingSound);
+            }
+            return playingSound;
+        }
+
+        auto playingSound = Globals::gAudio.play(sound, std::nullopt, false, true);
+        auto playbackDevice = Globals::gAudio.getAudioDevice(Globals::gSettings.outputs.front());
+
+        if (playbackDevice && !playbackDevice->isDefault)
+        {
+            auto remotePlayingSound = Globals::gAudio.play(sound, playbackDevice, true, false);
+            if (playingSound && remotePlayingSound)
+            {
+                groupedSounds->insert({playingSound->id, remotePlayingSound->id});
+                onSoundPlayed(*playingSound);
+                return *playingSound;
+            }
+
+            if (playingSound)
+                stopSound(playingSound->id);
+
+            if (remotePlayingSound)
+                stopSound(remotePlayingSound->id);
+
+            Fancy::fancy.logTime().failure() << "Failed to play sound " << sound.id << std::endl;
+            onError(Enums::ErrorCode::FailedToPlay);
+            return std::nullopt;
+        }
+
+        if (playingSound)
+        {
+            onSoundPlayed(*playingSound);
+        }
+        return playingSound;
     }
 #endif
+
+    namespace
+    {
+        //* Best-effort monitor configuration for the live voice path: the
+        //* processed microphone is fed into the same endpoint other apps listen
+        //* on (the null sink on Linux, the virtual cable on Windows) so a
+        //* selected voice preset is what everyone hears.
+        Audiopad::Audio::MicMonitor::Config monitorConfig()
+        {
+            Audiopad::Audio::MicMonitor::Config config;
+#if defined(__linux__)
+            if (Globals::gAudio.nullSink)
+            {
+                config.targetDevice = Globals::gAudio.nullSink->name;
+            }
+#elif defined(_WIN32)
+            if (auto target = findTargetOutputDevice())
+            {
+                config.targetDevice = target->name;
+            }
+#endif
+            return config;
+        }
+
+        //* Recursively reorders a folder tree's sounds by the persisted manual order.
+        void reorderFolderSoundsByOrder(Folder &folder, const std::map<std::uint32_t, std::size_t> &order)
+        {
+            const auto indexOf = [&order](std::uint32_t id) -> std::size_t {
+                const auto it = order.find(id);
+                return it == order.end() ? static_cast<std::size_t>(-1) : it->second;
+            };
+            std::stable_sort(folder.sounds.begin(), folder.sounds.end(),
+                             [&](const Sound &first, const Sound &second) {
+                                 return indexOf(first.id) < indexOf(second.id);
+                             });
+            for (auto &child : folder.folders)
+            {
+                reorderFolderSoundsByOrder(child, order);
+            }
+        }
+    } // namespace
+
+    std::optional<PlayingSound> Window::playSound(const std::uint32_t &id, bool suppressRepeat)
+    {
+        auto sound = Globals::gData.getSound(id);
+        if (!sound)
+        {
+            Fancy::fancy.logTime().failure() << "Sound " << id << " not found" << std::endl;
+            onError(Enums::ErrorCode::SoundNotFound);
+            return std::nullopt;
+        }
+
+        //* Snapshot of the model entry — policies are read consistently even if
+        //* the tree is being rescanned concurrently.
+        const Sound model = sound->get();
+
+        //* 1) Voice slot: the trigger selects a live voice filter instead of a file.
+        if (model.voicePreset)
+        {
+            const auto preset = Audiopad::Audio::MicMonitor::presetFromString(*model.voicePreset);
+            if (preset)
+            {
+                setVoicePreset(static_cast<Enums::VoicePreset>(*preset));
+            }
+            return std::nullopt;
+        }
+
+        //* 2) Per-sound trigger policy while an instance is already active.
+        const auto active = activeInstancesOfSound(id);
+        if (!active.empty())
+        {
+            switch (model.triggerMode)
+            {
+            case Enums::TriggerMode::PlayPause:
+            {
+                bool anyUnpaused = false;
+                for (const auto &instance : active)
+                {
+                    anyUnpaused = anyUnpaused || !instance.paused.load();
+                }
+                return anyUnpaused ? pauseSound(id) : resumeSound(id);
+            }
+            case Enums::TriggerMode::PlayStop:
+                stopSound(id);
+                return std::nullopt;
+            case Enums::TriggerMode::PushToLoop:
+            case Enums::TriggerMode::PlayRestart:
+            default:
+                //* Restart from the beginning — only this clip's instances.
+                stopSound(id);
+                break;
+            }
+        }
+
+        //* 3) Exclusivity: the per-sound flag outranks the global overlap setting.
+        if (model.stopOthers)
+        {
+            std::vector<std::uint32_t> others;
+            for (const auto &instance : Globals::gAudio.getPlayingSounds())
+            {
+                if (instance.sound.id != id)
+                {
+                    others.push_back(instance.id);
+                }
+            }
+            for (const auto other : others)
+            {
+                stopSound(other);
+            }
+        }
+        else if (!Globals::gSettings.allowOverlapping)
+        {
+#if defined(__linux__)
+            stopSounds(true);
+#else
+            stopSounds();
+#endif
+        }
+
+        //* Push-to-talk keys are held for the duration of the playback (the
+        //* release happens in onAllSoundsFinished / stopSounds).
+        if (!Globals::gSettings.pushToTalkKeys.empty())
+        {
+            Globals::gHotKeys.pressKeys(Globals::gSettings.pushToTalkKeys);
+        }
+
+        //* 4) Effective microphone policy: the per-sound flag overrides the global one.
+        const bool shouldMuteVoice = model.muteVoice.value_or(Globals::gSettings.muteDuringPlayback);
+
+        //* 5) Start the platform-specific output streams.
+        auto playing = playSoundStreams(model);
+
+        //* 6) Post-start policies.
+        if (playing)
+        {
+            std::vector<std::uint32_t> instanceIds{playing->id};
+            {
+                auto scoped = groupedSounds.scoped();
+                if (scoped->find(playing->id) != scoped->end())
+                {
+                    instanceIds.push_back(scoped->at(playing->id));
+                }
+            }
+
+            if (!suppressRepeat && (model.triggerMode == Enums::TriggerMode::PushToLoop || model.loopByDefault))
+            {
+                repeatSound(playing->id, true);
+            }
+
+            const bool silencedByOthers = applyMuteOthersPolicies(model, instanceIds);
+
+            for (const auto instanceId : instanceIds)
+            {
+                Globals::gAudio.setPlayingPolicyFlags(instanceId, silencedByOthers, shouldMuteVoice);
+            }
+
+            if (shouldMuteVoice)
+            {
+                requestVoiceMute();
+            }
+        }
+
+        return playing;
+    }
+
+    std::vector<PlayingSound> Window::activeInstancesOfSound(const std::uint32_t &soundId) const
+    {
+        std::vector<PlayingSound> instances;
+        for (const auto &instance : Globals::gAudio.getPlayingSounds())
+        {
+            if (instance.sound.id == soundId)
+            {
+                instances.emplace_back(instance);
+            }
+        }
+        return instances;
+    }
+
+    int Window::volumePercentFor(const PlayingSound &instance) const
+    {
+        if (instance.isRemote)
+        {
+            return instance.sound.remoteVolume ? *instance.sound.remoteVolume : Globals::gSettings.remoteVolume;
+        }
+        return instance.sound.localVolume ? *instance.sound.localVolume : Globals::gSettings.localVolume;
+    }
+
+    bool Window::applyMuteOthersPolicies(const Sound &sound, const std::vector<std::uint32_t> &newInstanceIds)
+    {
+        //* (a) This clip holds the "mute other sounds" policy: silence every
+        //* other active instance, remembering their volumes for restoration.
+        if (sound.muteOthers)
+        {
+            std::vector<std::uint32_t> victims;
+            for (const auto &instance : Globals::gAudio.getPlayingSounds())
+            {
+                if (instance.sound.id == sound.id)
+                {
+                    continue;
+                }
+                {
+                    auto scopedMuted = mutedByOthers.scoped();
+                    if (scopedMuted->find(instance.id) != scopedMuted->end())
+                    {
+                        continue; //* already silenced by some muter
+                    }
+                }
+                const int previous = volumePercentFor(instance);
+                Globals::gAudio.setVolume(instance.id, 0);
+                mutedByOthers->insert({instance.id, previous});
+                victims.push_back(instance.id);
+            }
+
+            if (!victims.empty())
+            {
+                auto scopedRegistry = muteOthersRegistry.scoped();
+                auto &list = (*scopedRegistry)[sound.id];
+                list.insert(list.end(), victims.begin(), victims.end());
+            }
+        }
+
+        //* (b) Another active clip already holds the policy: the freshly started
+        //* instances join the silenced set so they stay quiet until the muter ends.
+        for (const auto &instance : Globals::gAudio.getPlayingSounds())
+        {
+            if (instance.sound.id == sound.id || !instance.sound.muteOthers)
+            {
+                continue;
+            }
+
+            bool silenced = false;
+            auto scopedRegistry = muteOthersRegistry.scoped();
+            auto scopedMuted = mutedByOthers.scoped();
+            for (const auto instanceId : newInstanceIds)
+            {
+                if (scopedMuted->find(instanceId) != scopedMuted->end())
+                {
+                    silenced = true;
+                    continue;
+                }
+                int previous = 0;
+                for (const auto &candidate : Globals::gAudio.getPlayingSounds())
+                {
+                    if (candidate.id == instanceId)
+                    {
+                        previous = volumePercentFor(candidate);
+                        break;
+                    }
+                }
+                Globals::gAudio.setVolume(instanceId, 0);
+                scopedMuted->insert({instanceId, previous});
+                (*scopedRegistry)[instance.sound.id].push_back(instanceId);
+                silenced = true;
+            }
+            return silenced;
+        }
+        return false;
+    }
+
+    void Window::restoreMutedByOthers(const std::uint32_t &mutingSoundId)
+    {
+        std::vector<std::uint32_t> victims;
+        {
+            auto scopedRegistry = muteOthersRegistry.scoped();
+            const auto it = scopedRegistry->find(mutingSoundId);
+            if (it == scopedRegistry->end())
+            {
+                return;
+            }
+            victims = it->second;
+            scopedRegistry->erase(it);
+        }
+
+        for (const auto victim : victims)
+        {
+            int previous = 0;
+            {
+                auto scopedMuted = mutedByOthers.scoped();
+                const auto entry = scopedMuted->find(victim);
+                if (entry == scopedMuted->end())
+                {
+                    continue;
+                }
+                previous = entry->second;
+            }
+            Globals::gAudio.setVolume(victim, previous);
+            mutedByOthers->erase(victim);
+        }
+    }
+
+    void Window::requestVoiceMute()
+    {
+        const int previous = voiceMuteRequests.fetch_add(1);
+        if (previous == 0)
+        {
+            applyMicMute(true);
+        }
+    }
+
+    void Window::releaseVoiceMute()
+    {
+        int current = voiceMuteRequests.load();
+        while (current > 0)
+        {
+            if (voiceMuteRequests.compare_exchange_weak(current, current - 1))
+            {
+                if (current == 1)
+                {
+                    applyMicMute(false);
+                }
+                return;
+            }
+        }
+    }
+
+    void Window::applyMicMute(bool muted)
+    {
+#if defined(__linux__)
+        if (Globals::gAudioBackend)
+        {
+            if (!Globals::gAudioBackend->muteInput(muted))
+            {
+                onError(Enums::ErrorCode::FailedToMute);
+            }
+        }
+#elif defined(_WIN32)
+        if (Globals::gWinSound && Globals::gWinSound->getMic())
+        {
+            if (!Globals::gWinSound->getMic()->mute(muted))
+            {
+                onError(Enums::ErrorCode::FailedToMute);
+            }
+        }
+#endif
+        micMutedByToggle.store(muted);
+        onMicMuteChanged(muted);
+    }
+
+    void Window::teardownPlaybackPolicies(const PlayingSound &instance)
+    {
+        if (instance.sound.muteOthers)
+        {
+            restoreMutedByOthers(instance.sound.id);
+        }
+        mutedByOthers->erase(instance.id);
+        if (instance.voiceMuteRequested)
+        {
+            releaseVoiceMute();
+        }
+    }
+
+    void Window::teardownAllPlaybackPolicies()
+    {
+        muteOthersRegistry->clear();
+        mutedByOthers->clear();
+        while (voiceMuteRequests.load() > 0)
+        {
+            releaseVoiceMute();
+        }
+    }
+
+    bool Window::toggleMicMute()
+    {
+        const bool next = !micMutedByToggle.load();
+        applyMicMute(next);
+        return next;
+    }
+
+    bool Window::isMicMuted() const
+    {
+        return micMutedByToggle.load();
+    }
+
+    void Window::applyHearMyself()
+    {
+        if (!Globals::gMicMonitor)
+        {
+            Globals::gMicMonitor = std::make_unique<Audiopad::Audio::MicMonitor>();
+        }
+
+        const auto preset = voicePreset();
+        const bool shouldRun = Globals::gSettings.hearMyself ||
+                               preset != static_cast<Enums::VoicePreset>(Audiopad::Audio::MicMonitor::Preset::Off);
+        const bool running = Globals::gMicMonitor->isActive();
+
+        if (shouldRun && (!running || Globals::gMicMonitor->monitorEnabled() != Globals::gSettings.hearMyself))
+        {
+            if (running)
+            {
+                Globals::gMicMonitor->stop();
+            }
+            Globals::gMicMonitor->setMonitorEnabled(Globals::gSettings.hearMyself);
+            Globals::gMicMonitor->setPreset(static_cast<Audiopad::Audio::MicMonitor::Preset>(preset));
+            if (!Globals::gMicMonitor->start(monitorConfig()))
+            {
+                Fancy::fancy.logTime().warning() << "Live microphone monitoring could not be started" << std::endl;
+            }
+        }
+        else if (!shouldRun && running)
+        {
+            Globals::gMicMonitor->stop();
+        }
+        else if (running)
+        {
+            Globals::gMicMonitor->setPreset(static_cast<Audiopad::Audio::MicMonitor::Preset>(preset));
+        }
+    }
+
+    bool Window::toggleHearMyself()
+    {
+        const bool next = !Globals::gSettings.hearMyself;
+        Globals::gSettings.hearMyself = next;
+        Globals::gConfig.save();
+        applyHearMyself();
+        if (Globals::gControlServer)
+        {
+            Globals::gControlServer->broadcastHearMyself(next);
+        }
+        return next;
+    }
+
+    void Window::setVoicePreset(Enums::VoicePreset preset)
+    {
+        if (!Globals::gMicMonitor)
+        {
+            Globals::gMicMonitor = std::make_unique<Audiopad::Audio::MicMonitor>();
+        }
+        Globals::gMicMonitor->setPreset(static_cast<Audiopad::Audio::MicMonitor::Preset>(preset));
+        applyHearMyself();
+        onVoicePresetChanged(preset);
+    }
+
+    Enums::VoicePreset Window::voicePreset() const
+    {
+        return Globals::gMicMonitor ? static_cast<Enums::VoicePreset>(Globals::gMicMonitor->preset())
+                                    : Enums::VoicePreset::Off;
+    }
+
+    bool Window::toggleOverlay()
+    {
+        const bool next = !Globals::gSettings.overlayEnabled;
+        Globals::gSettings.overlayEnabled = next;
+        Globals::gConfig.save();
+        return next;
+    }
+
+    void Window::setOverlayPosition(int position)
+    {
+        if (position < 0)
+        {
+            position = 0;
+        }
+        if (position > 7)
+        {
+            position = 7;
+        }
+        Globals::gSettings.overlayPosition = position;
+        Globals::gConfig.save();
+    }
+
+    void Window::cycleOverlayPosition()
+    {
+        setOverlayPosition((Globals::gSettings.overlayPosition + 1) % 8);
+    }
+
+    std::optional<Sound> Window::renameSound(const std::uint32_t &id, const std::string &name)
+    {
+        const auto first = name.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos)
+        {
+            onError(Enums::ErrorCode::InvalidSoundName);
+            return std::nullopt;
+        }
+        const auto last = name.find_last_not_of(" \t\r\n");
+        const std::string trimmed = name.substr(first, last - first + 1);
+
+        auto updated = Globals::gData.updateSound(id, [&](Sound &sound) { sound.displayName = trimmed; });
+        if (updated)
+        {
+            Globals::gConfig.save();
+            if (Globals::gControlServer)
+            {
+                Globals::gControlServer->broadcastTabsChanged();
+            }
+        }
+        return updated;
+    }
+
+    std::optional<Sound> Window::setSoundTags(const std::uint32_t &id, const std::vector<std::string> &tags)
+    {
+        std::vector<std::string> cleaned;
+        for (const auto &tag : tags)
+        {
+            const auto first = tag.find_first_not_of(" \t\r\n");
+            if (first == std::string::npos)
+            {
+                continue;
+            }
+            const auto last = tag.find_last_not_of(" \t\r\n");
+            std::string trimmed = tag.substr(first, last - first + 1);
+            if (trimmed.size() > 32)
+            {
+                trimmed = trimmed.substr(0, 32);
+            }
+            if (std::find(cleaned.begin(), cleaned.end(), trimmed) == cleaned.end())
+            {
+                cleaned.emplace_back(std::move(trimmed));
+            }
+            if (cleaned.size() >= 16)
+            {
+                break;
+            }
+        }
+
+        auto updated = Globals::gData.updateSound(id, [&](Sound &sound) { sound.tags = cleaned; });
+        if (updated)
+        {
+            Globals::gConfig.save();
+            if (Globals::gControlServer)
+            {
+                Globals::gControlServer->broadcastTabsChanged();
+            }
+        }
+        return updated;
+    }
+
+    std::optional<Sound> Window::setSoundPolicies(const std::uint32_t &id, Enums::TriggerMode triggerMode,
+                                                  bool loopByDefault, bool stopOthers, bool muteOthers,
+                                                  const std::optional<bool> &muteVoice)
+    {
+        auto updated = Globals::gData.updateSound(id, [&](Sound &sound) {
+            sound.triggerMode = triggerMode;
+            sound.loopByDefault = loopByDefault;
+            sound.stopOthers = stopOthers;
+            sound.muteOthers = muteOthers;
+            sound.muteVoice = muteVoice;
+        });
+        if (updated)
+        {
+            Globals::gConfig.save();
+        }
+        return updated;
+    }
+
+    std::optional<Sound> Window::setSoundVoiceSlot(const std::uint32_t &id, const std::optional<std::string> &preset)
+    {
+        if (preset && !preset->empty() && !Audiopad::Audio::MicMonitor::presetFromString(*preset))
+        {
+            onError(Enums::ErrorCode::InvalidSoundName);
+            return std::nullopt;
+        }
+
+        auto updated = Globals::gData.updateSound(id, [&](Sound &sound) {
+            sound.voicePreset = preset && !preset->empty() ? preset : std::nullopt;
+        });
+        if (updated)
+        {
+            Globals::gConfig.save();
+            if (Globals::gControlServer)
+            {
+                Globals::gControlServer->broadcastTabsChanged();
+            }
+        }
+        return updated;
+    }
+
+    std::optional<Tab> Window::setTabIcon(const std::uint32_t &id, const std::string &icon)
+    {
+        auto tab = Globals::gData.getTab(id);
+        if (!tab)
+        {
+            Fancy::fancy.logTime().failure() << "Failed to set icon for tab " << id << " tab does not exist"
+                                             << std::endl;
+            onError(Enums::ErrorCode::TabDoesNotExist);
+            return std::nullopt;
+        }
+
+        tab->icon = icon;
+        auto newTab = Globals::gData.setTab(id, *tab);
+        if (newTab)
+        {
+            Globals::gConfig.save();
+            if (Globals::gControlServer)
+            {
+                Globals::gControlServer->broadcastTabsChanged();
+            }
+            return newTab;
+        }
+
+        onError(Enums::ErrorCode::TabDoesNotExist);
+        return std::nullopt;
+    }
+
+    std::optional<Tab> Window::setSoundOrder(const std::uint32_t &tabId, const std::vector<std::uint32_t> &orderedIds)
+    {
+        auto tab = Globals::gData.getTab(tabId);
+        if (!tab)
+        {
+            onError(Enums::ErrorCode::TabDoesNotExist);
+            return std::nullopt;
+        }
+
+        //* Sanitize: keep the submitted order, append anything missing exactly
+        //* once, drop duplicates.
+        tab->soundOrder.clear();
+        {
+            std::set<std::uint32_t> seen;
+            for (const auto id : orderedIds)
+            {
+                if (seen.insert(id).second)
+                {
+                    tab->soundOrder.push_back(id);
+                }
+            }
+            for (const auto &sound : Data::getFlatSounds(*tab))
+            {
+                if (seen.insert(sound.id).second)
+                {
+                    tab->soundOrder.push_back(sound.id);
+                }
+            }
+        }
+        tab->sortMode = Enums::SortMode::Manual;
+
+        //* Mirror the new arrangement into the in-memory model right away so
+        //* getTabs() reflects it without waiting for a rescan.
+        {
+            std::map<std::uint32_t, std::size_t> order;
+            for (std::size_t index = 0; index < tab->soundOrder.size(); index++)
+            {
+                order.emplace(tab->soundOrder.at(index), index);
+            }
+            const auto indexOf = [&order](std::uint32_t id) -> std::size_t {
+                const auto it = order.find(id);
+                return it == order.end() ? static_cast<std::size_t>(-1) : it->second;
+            };
+            std::stable_sort(tab->sounds.begin(), tab->sounds.end(), [&](const Sound &first, const Sound &second) {
+                return indexOf(first.id) < indexOf(second.id);
+            });
+            for (auto &folder : tab->folders)
+            {
+                reorderFolderSoundsByOrder(folder, order);
+            }
+        }
+
+        auto newTab = Globals::gData.setTab(tabId, *tab);
+        if (newTab)
+        {
+            Globals::gConfig.save();
+            return newTab;
+        }
+
+        onError(Enums::ErrorCode::TabDoesNotExist);
+        return std::nullopt;
+    }
+    std::optional<Tab> Window::setFolderOrder(const std::uint32_t &tabId, const std::vector<std::uint32_t> &orderedIds)
+    {
+        auto tab = Globals::gData.getTab(tabId);
+        if (!tab)
+        {
+            onError(Enums::ErrorCode::TabDoesNotExist);
+            return std::nullopt;
+        }
+
+        //* Sanitize: keep the submitted order, append every known folder id
+        //* exactly once (pre-order walk), drop duplicates and unknown ids.
+        tab->folderOrder = Ordering::sanitizeOrder(orderedIds, Ordering::collectFolderIds(tab->folders));
+        tab->sortMode = Enums::SortMode::Manual;
+
+        //* Mirror the new arrangement into the in-memory model right away so
+        //* getTabs() reflects it without waiting for a rescan.
+        Ordering::applyFolderOrder(tab->folders, tab->folderOrder);
+
+        auto newTab = Globals::gData.setTab(tabId, *tab);
+        if (newTab)
+        {
+            Globals::gConfig.save();
+            if (Globals::gControlServer)
+            {
+                Globals::gControlServer->broadcastTabsChanged();
+            }
+            return newTab;
+        }
+
+        onError(Enums::ErrorCode::TabDoesNotExist);
+        return std::nullopt;
+    }
+
+    BoardLoopInfo Window::boardLoopCycle(const std::uint32_t &tabId)
+    {
+        auto tab = Globals::gData.getTab(tabId);
+        if (!tab)
+        {
+            onError(Enums::ErrorCode::TabDoesNotExist);
+            return getBoardLoopState();
+        }
+
+        //* One click advances: Off -> board-only -> board + subfolders -> Off.
+        //* Clicking another board's button restarts the cycle there.
+        Enums::BoardLoopMode nextMode = Enums::BoardLoopMode::Off;
+        {
+            auto scoped = boardLoop.scoped();
+            if (scoped->mode == Enums::BoardLoopMode::Off || scoped->tabId != tabId)
+            {
+                nextMode = Enums::BoardLoopMode::BoardOnly;
+            }
+            else if (scoped->mode == Enums::BoardLoopMode::BoardOnly)
+            {
+                nextMode = Enums::BoardLoopMode::BoardAndFolders;
+            }
+        }
+
+        if (nextMode == Enums::BoardLoopMode::Off)
+        {
+            //* Turn off: clear the state first so the internal stopSound below
+            //* cannot trigger the skip-advance hook.
+            std::uint32_t currentSoundId = 0;
+            {
+                auto scoped = boardLoop.scoped();
+                currentSoundId = scoped->currentSoundId;
+                *scoped = BoardLoopState{};
+            }
+            if (currentSoundId != 0)
+            {
+                stopSound(currentSoundId);
+            }
+            onBoardLoopChanged(Enums::BoardLoopMode::Off, tabId);
+            return getBoardLoopState();
+        }
+
+        const auto sequence = Ordering::buildBoardLoopSequence(*tab, nextMode);
+        if (sequence.empty())
+        {
+            //* Nothing playable (empty board / only voice slots): stay off.
+            {
+                auto scoped = boardLoop.scoped();
+                *scoped = BoardLoopState{};
+            }
+            onBoardLoopChanged(Enums::BoardLoopMode::Off, tabId);
+            return getBoardLoopState();
+        }
+
+        //* Switching modes keeps the currently playing clip alive: find it in
+        //* the new sequence and continue right behind it, so board-only ->
+        //* board + folders never restarts the running sound.
+        std::uint32_t carryOverSoundId = 0;
+        {
+            auto scoped = boardLoop.scoped();
+            carryOverSoundId = scoped->currentSoundId;
+
+            scoped->mode = nextMode;
+            scoped->tabId = tabId;
+            scoped->sequence = sequence;
+            scoped->consecutiveFailures = 0;
+            scoped->cursor = 0;
+            if (carryOverSoundId != 0)
+            {
+                const auto it = std::find(sequence.begin(), sequence.end(), carryOverSoundId);
+                if (it != sequence.end())
+                {
+                    scoped->cursor = static_cast<std::size_t>(it - sequence.begin());
+                }
+                else
+                {
+                    //* The running clip is not part of the new sequence — stop
+                    //* it (currentSoundId cleared first: no skip-advance) and
+                    //* start fresh from the top.
+                    scoped->currentSoundId = 0;
+                }
+            }
+        }
+
+        if (carryOverSoundId == 0)
+        {
+            playNextBoardLoopSound();
+        }
+        else
+        {
+            bool stillCarrying = false;
+            {
+                auto scoped = boardLoop.scoped();
+                stillCarrying = scoped->currentSoundId == carryOverSoundId;
+            }
+            if (!stillCarrying)
+            {
+                stopSound(carryOverSoundId);
+                playNextBoardLoopSound();
+            }
+        }
+
+        onBoardLoopChanged(nextMode, tabId);
+        return getBoardLoopState();
+    }
+
+    BoardLoopInfo Window::getBoardLoopState()
+    {
+        const auto state = boardLoop.copy();
+        BoardLoopInfo info;
+        info.mode = state.mode;
+        info.tabId = state.tabId;
+        info.total = state.sequence.size();
+        info.currentSoundId = state.currentSoundId;
+        info.index = state.sequence.empty() ? 0 : (state.cursor % state.sequence.size()) + 1;
+        return info;
+    }
+
+    void Window::playNextBoardLoopSound()
+    {
+        {
+            auto scoped = boardLoop.scoped();
+            if (scoped->mode == Enums::BoardLoopMode::Off || scoped->sequence.empty() || scoped->advancing)
+            {
+                return;
+            }
+            scoped->advancing = true;
+        }
+
+        //* Start the clip at the cursor, skipping entries that fail to start
+        //* (vanished files, engine hiccups). A full failed sweep gives up —
+        //* everything with the guard released: playSound takes its own locks.
+        std::uint32_t startedSoundId = 0;
+        while (true)
+        {
+            std::uint32_t soundId = 0;
+            {
+                auto scoped = boardLoop.scoped();
+                if (scoped->mode == Enums::BoardLoopMode::Off || scoped->sequence.empty())
+                {
+                    break;
+                }
+                soundId = scoped->sequence.at(scoped->cursor);
+            }
+
+            //* The board loop owns repetition — suppress the clip's own loop
+            //* default / push-to-loop repeat so one clip can't stall the chain.
+            auto playing = playSound(soundId, true);
+            if (playing)
+            {
+                startedSoundId = soundId;
+                break;
+            }
+
+            bool giveUp = false;
+            {
+                auto scoped = boardLoop.scoped();
+                if (scoped->mode == Enums::BoardLoopMode::Off || scoped->sequence.empty())
+                {
+                    break;
+                }
+                scoped->consecutiveFailures += 1;
+                if (static_cast<std::size_t>(scoped->consecutiveFailures) >= scoped->sequence.size())
+                {
+                    giveUp = true;
+                }
+                else
+                {
+                    scoped->cursor = (scoped->cursor + 1) % scoped->sequence.size();
+                }
+            }
+            if (giveUp)
+            {
+                Fancy::fancy.logTime().warning() << "Board loop gave up: no clip of the board could be started"
+                                                 << std::endl;
+                {
+                    auto scoped = boardLoop.scoped();
+                    *scoped = BoardLoopState{};
+                }
+                onBoardLoopChanged(Enums::BoardLoopMode::Off, 0);
+                break;
+            }
+        }
+
+        {
+            auto scoped = boardLoop.scoped();
+            scoped->advancing = false;
+            if (startedSoundId != 0)
+            {
+                scoped->currentSoundId = startedSoundId;
+                scoped->consecutiveFailures = 0;
+            }
+        }
+    }
+
+    std::vector<Tab> Window::moveSoundsToTab(const std::vector<std::uint32_t> &soundIds,
+                                             const std::uint32_t &targetTabId,
+                                             const std::optional<std::uint32_t> &targetFolderId)
+    {
+        auto targetTab = Globals::gData.getTab(targetTabId);
+        if (!targetTab)
+        {
+            Fancy::fancy.logTime().failure() << "Failed to move sounds into tab " << targetTabId
+                                             << " tab does not exist" << std::endl;
+            onError(Enums::ErrorCode::TabDoesNotExist);
+            return Globals::gData.getTabs();
+        }
+
+        std::filesystem::path destinationRoot(targetTab->path);
+        if (targetFolderId)
+        {
+            auto *folder = Globals::gData.findFolderById(targetTab->folders, *targetFolderId);
+            if (!folder)
+            {
+                onError(Enums::ErrorCode::FolderDoesNotExist);
+                return Globals::gData.getTabs();
+            }
+            destinationRoot = std::filesystem::path(folder->path);
+        }
+
+        //* Phase 1 — move the files on disk and remember which source tabs own them.
+        std::vector<Sound> moved;
+        std::set<std::uint32_t> sourceTabIds;
+        for (const auto soundId : soundIds)
+        {
+            auto sound = Globals::gData.getSound(soundId);
+            if (!sound)
+            {
+                continue;
+            }
+            Sound entry = sound->get();
+
+            std::error_code ec;
+            const std::filesystem::path source(entry.path);
+            if (entry.voicePreset || !std::filesystem::exists(source, ec))
+            {
+                continue; //* voice slots own no file; missing files cannot move
+            }
+
+            auto owningTab = Globals::gData.getTabBySoundId(soundId);
+            if (owningTab)
+            {
+                sourceTabIds.insert(owningTab->id);
+            }
+
+            const std::string base = source.stem().u8string();
+            std::filesystem::path destination = destinationRoot / source.filename();
+            for (std::size_t attempt = 2; std::filesystem::exists(destination, ec) && attempt < 1000; attempt++)
+            {
+                destination =
+                    destinationRoot / (base + " (" + std::to_string(attempt) + ")" + source.extension().u8string());
+            }
+
+            std::filesystem::rename(source, destination, ec);
+            if (ec)
+            {
+                std::error_code copyEc;
+                if (!std::filesystem::copy_file(source, destination, std::filesystem::copy_options::none, copyEc))
+                {
+                    Fancy::fancy.logTime().warning()
+                        << "Failed to move '" << entry.path << "': " << copyEc.message() << std::endl;
+                    continue;
+                }
+                std::error_code removeEc;
+                std::filesystem::remove(source, removeEc);
+            }
+
+            entry.path = normalizePath(destination);
+            moved.emplace_back(std::move(entry));
+        }
+
+        if (moved.empty())
+        {
+            onError(Enums::ErrorCode::FailedToMoveSound);
+            return Globals::gData.getTabs();
+        }
+
+        //* Stop playback of everything that moved — the source file is gone.
+        for (const auto &entry : moved)
+        {
+            stopSound(entry.id);
+        }
+
+        //* Phase 2 — model surgery: remove from the source trees, then pre-seed
+        //* into the target so the next rescan matches by path and keeps ids,
+        //* hotkeys, favorites and every per-sound policy alive.
+        for (const auto &entry : moved)
+        {
+            Globals::gData.removeSoundFromModel(entry.id);
+        }
+        for (const auto &entry : moved)
+        {
+            Globals::gData.seedSoundInTab(targetTabId, entry);
+        }
+
+        //* Phase 3 — rescan the affected tabs so folder placement is correct.
+        for (const auto tabId : sourceTabIds)
+        {
+            refreshTab(tabId);
+        }
+        if (sourceTabIds.find(targetTabId) == sourceTabIds.end())
+        {
+            refreshTab(targetTabId);
+        }
+
+        Globals::gConfig.save();
+        if (Globals::gControlServer)
+        {
+            Globals::gControlServer->broadcastTabsChanged();
+        }
+        return Globals::gData.getTabs();
+    }
+
+    std::optional<Sound> Window::trimSound(const std::uint32_t &soundId, std::uint64_t startMs, std::uint64_t endMs)
+    {
+        auto sound = Globals::gData.getSound(soundId);
+        if (!sound)
+        {
+            onError(Enums::ErrorCode::SoundNotFound);
+            return std::nullopt;
+        }
+        const Sound entry = sound->get();
+        if (entry.voicePreset)
+        {
+            onError(Enums::ErrorCode::FailedToTrim);
+            return std::nullopt;
+        }
+
+        auto owningTab = Globals::gData.getTabBySoundId(soundId);
+        if (!owningTab)
+        {
+            onError(Enums::ErrorCode::TabDoesNotExist);
+            return std::nullopt;
+        }
+
+        const std::filesystem::path source(entry.path);
+        const std::string base = source.stem().u8string() + " (trimmed)";
+        std::filesystem::path destination = source.parent_path() / (base + ".wav");
+        for (std::size_t attempt = 2;
+             std::filesystem::exists(destination) && attempt < 1000; attempt++)
+        {
+            destination = source.parent_path() / (base + " (" + std::to_string(attempt) + ").wav");
+        }
+
+        if (!Helpers::Recorder::trimAudioFile(entry.path, destination.u8string(), startMs, endMs))
+        {
+            onError(Enums::ErrorCode::FailedToTrim);
+            return std::nullopt;
+        }
+
+        auto refreshed = refreshTab(owningTab->id);
+        if (!refreshed)
+        {
+            return std::nullopt;
+        }
+        Globals::gConfig.save();
+
+        //* Locate the freshly created entry inside the rescanned tree.
+        const std::string createdPath = normalizePath(destination);
+        const auto findInSounds = [&createdPath](const std::vector<Sound> &sounds) -> std::optional<Sound> {
+            for (const auto &candidate : sounds)
+            {
+                if (candidate.path == createdPath)
+                {
+                    return candidate;
+                }
+            }
+            return std::nullopt;
+        };
+        const std::function<std::optional<Sound>(const std::vector<Folder> &)> findInFolders =
+            [&](const std::vector<Folder> &folders) -> std::optional<Sound> {
+            for (const auto &folder : folders)
+            {
+                if (auto found = findInSounds(folder.sounds))
+                {
+                    return found;
+                }
+                if (auto found = findInFolders(folder.folders))
+                {
+                    return found;
+                }
+            }
+            return std::nullopt;
+        };
+
+        if (auto found = findInSounds(refreshed->sounds))
+        {
+            return found;
+        }
+        if (auto found = findInFolders(refreshed->folders))
+        {
+            return found;
+        }
+        return std::nullopt;
+    }
+
+    std::optional<Tab> Window::importFileIntoTab(const std::uint32_t &tabId, const std::string &filePath,
+                                                 const std::optional<std::uint32_t> &parentFolderId)
+    {
+        return importDroppedPaths(tabId, parentFolderId, {filePath}, "children");
+    }
     namespace
     {
         std::optional<std::uint32_t> resolveRemoteSoundId(
@@ -1705,6 +2729,22 @@ namespace Audiopad::Objects
     }
     bool Window::stopSound(const std::uint32_t &id)
     {
+        //* Board loop: stopping the loop's current clip is a "skip" — the
+        //* sequence moves on to the next entry. Turning the loop off clears
+        //* currentSoundId before stopping, and starts triggered by the loop
+        //* itself run inside the `advancing` window, so neither ever lands here.
+        bool skipBoardLoop = false;
+        {
+            auto scoped = boardLoop.scoped();
+            if (scoped->mode != Enums::BoardLoopMode::Off && !scoped->advancing &&
+                scoped->currentSoundId == id && !scoped->sequence.empty())
+            {
+                scoped->cursor = (scoped->cursor + 1) % scoped->sequence.size();
+                scoped->currentSoundId = 0;
+                skipBoardLoop = true;
+            }
+        }
+
         bool stoppedAny = false;
         std::vector<std::uint32_t> playingSoundIdsToStop;
 
@@ -1749,10 +2789,35 @@ namespace Audiopad::Objects
             onAllSoundsFinished();
         }
 
+        if (skipBoardLoop)
+        {
+            playNextBoardLoopSound();
+        }
+
         return stoppedAny;
     }
     void Window::stopSounds(bool sync)
     {
+        //* Stop-all ends the whole-board loop too — unless it was invoked by
+        //* the loop's own start (overlap setting), which the `advancing`
+        //* window marks. The state is cleared before the voices stop so no
+        //* finishing instance can advance the dead loop.
+        {
+            bool cancelLoop = false;
+            {
+                auto scoped = boardLoop.scoped();
+                if (scoped->mode != Enums::BoardLoopMode::Off && !scoped->advancing)
+                {
+                    *scoped = BoardLoopState{};
+                    cancelLoop = true;
+                }
+            }
+            if (cancelLoop)
+            {
+                onBoardLoopChanged(Enums::BoardLoopMode::Off, 0);
+            }
+        }
+
         if (!sync)
         {
             Globals::gQueue.push_unique(0, []() { Globals::gAudio.stopAll(); });
@@ -1761,6 +2826,11 @@ namespace Audiopad::Objects
         {
             Globals::gAudio.stopAll();
         }
+
+        //* Stop-all skips the per-instance finish funnel — release every
+        //* outstanding playback policy ("mute others" victims are gone with
+        //* the voices, per-sound mic mutes drain) in one sweep.
+        teardownAllPlaybackPolicies();
 
         onAllSoundsFinished();
         groupedSounds->clear();
@@ -2257,6 +3327,10 @@ namespace Audiopad::Objects
 #endif
     void Window::onSoundFinished(const PlayingSound &sound)
     {
+        //* Per-sound playback policies: restore silenced victims and release
+        //* this instance's microphone-mute request before anything else.
+        teardownPlaybackPolicies(sound);
+
         auto scoped = groupedSounds.scoped();
         if (scoped->find(sound.id) != scoped->end())
         {
@@ -2267,6 +3341,40 @@ namespace Audiopad::Objects
         if (Globals::gAudio.getPlayingSounds().size() == 1)
         {
             onAllSoundsFinished();
+        }
+
+        //* Whole-board loop: when the loop's current clip fully ended, the
+        //* sequence moves on and wraps around. The finishing instance is
+        //* erased from the engine's active list only after this callback
+        //* returns, so it is excluded and a surviving sibling instance (local
+        //* + remote pair, manual restart) delays the advance. The next clip
+        //* starts with the guard released — playSound may take its own locks
+        //* and must never run under boardLoop's.
+        bool advanceBoardLoop = false;
+        {
+            auto loopScoped = boardLoop.scoped();
+            if (loopScoped->mode != Enums::BoardLoopMode::Off && loopScoped->currentSoundId == sound.sound.id &&
+                !loopScoped->sequence.empty())
+            {
+                bool hasSiblingInstances = false;
+                for (const auto &instance : Globals::gAudio.getPlayingSounds())
+                {
+                    if (instance.sound.id == sound.sound.id && instance.id != sound.id)
+                    {
+                        hasSiblingInstances = true;
+                        break;
+                    }
+                }
+                if (!hasSiblingInstances)
+                {
+                    loopScoped->cursor = (loopScoped->cursor + 1) % loopScoped->sequence.size();
+                    advanceBoardLoop = true;
+                }
+            }
+        }
+        if (advanceBoardLoop)
+        {
+            playNextBoardLoopSound();
         }
     }
     void Window::onAllSoundsFinished()
