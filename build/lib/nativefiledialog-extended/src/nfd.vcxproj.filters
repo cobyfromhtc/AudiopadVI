@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\nfd_win.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include\nfd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\include\nfd.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\User\Desktop\Folders\AudioPad\AudioPadV2\lib\nativefiledialog-extended\src\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{D48AF394-AC77-377C-A4EC-2CCA77D75B4A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{80880F8B-8308-3FF7-9341-CCC101000C1E}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
